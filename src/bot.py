@@ -1370,75 +1370,18 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             except Exception as e:
                 print(f"[!] ไม่สามารถมอบยศ {member_role.name} ให้ {member.name}: {e}")
 
-        matched_roles = []
-        for kw, rname in GAME_ROLE_MAPPING.items():
-            if kw in user_games_text:
-                r = (
-                    discord.utils.get(guild.roles, name=rname) or
-                    discord.utils.find(lambda x: kw in x.name.lower() or rname.split("・")[-1].lower() in x.name.lower(), guild.roles)
-                )
-                if r and r not in member.roles:
-                    try:
-                        await member.add_roles(r)
-                        matched_roles.append(r.name)
-                    except Exception as e:
-                        print(f"[!] ไม่สามารถมอบยศเกม {r.name}: {e}")
-
-        # ⚔️ มอบยศอาชีพ Ragnarok ทันทีหากระบุอาชีพมา
-        if jkey:
-            job_info = RAGNAROK_JOBS.get(jkey)
-            if job_info:
-                job_role_name = job_info["role"]
-                job_role = discord.utils.get(guild.roles, name=job_role_name)
-                if not job_role:
-                    try:
-                        job_role = await guild.create_role(name=job_role_name, color=discord.Color.blue(), reason="Auto-created RO Job Role")
-                    except Exception:
-                        pass
-                if job_role and job_role not in member.roles:
-                    try:
-                        await member.add_roles(job_role)
-                        matched_roles.append(f"{job_info['emoji']} {job_info['name']}")
-                    except Exception:
-                        pass
-                ro_main = discord.utils.get(guild.roles, name="🗡️・Ragnarok")
-                if ro_main and ro_main not in member.roles:
-                    try:
-                        await member.add_roles(ro_main)
-                    except Exception:
-                        pass
-
-        roles_display = ", ".join([f"`{r}`" for r in matched_roles]) if matched_roles else "`สมาชิกทั่วไป`"
-        
         reply_msg = (
             f"✅ **ตั้งค่าโปรไฟล์สำเร็จแล้วครับ!** 🎉\n\n"
             f"• 👤 **ชื่อของคุณในเซิร์ฟเวอร์:** `{final_name}`\n"
             f"• ⭐ **เลเวลเริ่มต้น:** `Lv.{current_lvl}`\n"
             f"• 🪙 **เหรียญขวัญถุงต้อนรับ:** `+{starting_coins:,} ☕ Coins`\n"
-            f"• 🎮 **ยศที่ได้รับ:** {roles_display}\n\n"
-            f"🔓 **ปลดล็อคห้องทั้งหมดในเซิร์ฟเวอร์ Gamers’ Café เรียบร้อยแล้ว** ไปลุยเล่นเกมกับเพื่อนๆ ได้เลยครับ! ☕🎮"
+            f"• 👑 **ยศที่ได้รับ:** {member_role.mention if member_role else '`Cafe Member`'}\n\n"
+            f"🔓 **ปลดล็อคห้องทั้งหมดในเซิร์ฟเวอร์ Gamers’ Café เรียบร้อยแล้ว**\n"
+            f"👉 *คุณสามารถกดปุ่มเลือกอาชีพ Ragnarok หรือกดรับยศเกมอื่นๆ ด้านล่างนี้ได้เลยครับ!* ☕🎮"
         )
         await interaction.response.send_message(reply_msg)
         await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
-
-        # ถ้าผู้ใช้เล่น Ragnarok (ทุกเวอร์ชัน) ให้ส่งเมนูดรอปดาวน์เลือกอาชีพทันที
-        is_ro = check_is_ragnarok_player(user_games_text)
-        if is_ro:
-            ro_prompt_embed = discord.Embed(
-                title="⚔️ คุณเล่น Ragnarok! กรุณาเลือกอาชีพของคุณ 🎮",
-                description=(
-                    "🏰 **เลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:**\n\n"
-                    "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
-                    "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์**\n"
-                    "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
-                ),
-                color=discord.Color.gold()
-            )
-            try:
-                await interaction.user.send(embed=ro_prompt_embed, view=ROJobSelectView(member.id))
-            except Exception:
-                pass
 
 # ==================== ⭐ GUI Modals เครดิต ====================
 
