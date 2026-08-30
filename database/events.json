@@ -1,0 +1,20 @@
+{
+  "counter": 2,
+  "events": {
+    "1": {
+      "event_id": 1,
+      "discord_event_id": 1543568529503031306,
+      "title": "ล่าบอส",
+      "game": "ROM / ROX",
+      "time_str": "18:00",
+      "event_timestamp": 1788087600.744,
+      "balance_timestamp": 1788087120.744,
+      "party_size": 6,
+      "creator_id": 455612979984072704,
+      "status": "balanced",
+      "participants": {},
+      "created_at": "30/08/2026 17:30",
+      "channel_msg_id": 1543568532426723379
+    }
+  }
+}
