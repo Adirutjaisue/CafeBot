@@ -1186,11 +1186,19 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         max_length=100,
         required=False
     )
+    ro_job_input = TextInput(
+        label="4. อาชีพใน Ragnarok (ถ้าเล่น RO)",
+        placeholder="เช่น ไนท์, พรีส, วิสาด, ฮัน, แอส, ม้อง, พาลา, ช่าง, ฯลฯ",
+        min_length=0,
+        max_length=30,
+        required=False
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         user_nick = self.nickname_input.value.strip()
         user_ign = self.ign_input.value.strip()
         user_games_text = self.games_input.value.strip().lower()
+        user_ro_job_text = self.ro_job_input.value.strip()
 
         guild = bot.get_guild(TARGET_GUILD_ID)
         if not guild:
@@ -1216,11 +1224,20 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         current_lvl = current_data.get("level", 1)
         current_data["base_name"] = base_name
 
+        # ⚔️ ตรวจสอบอาชีพ Ragnarok จากช่องที่ 4 หรือจากช่องเกม
+        jkey, jname, jem = resolve_ro_job(user_ro_job_text)
+        if not jkey and check_is_ragnarok_player(user_games_text):
+            jkey, jname, jem = resolve_ro_job(user_games_text)
+
+        if jkey:
+            current_data["ro_job"] = jkey
+            current_data["job_emoji"] = jem
+
         user_levels_db[uid] = current_data
         save_user_levels(user_levels_db)
 
         starting_coins = add_user_coins(uid, 100)
-        final_name = format_nickname_with_level(base_name, current_lvl, current_data.get("job_emoji", ""))
+        final_name = format_nickname_with_level(base_name, current_lvl, jem or current_data.get("job_emoji", ""))
 
         try:
             await member.edit(nick=final_name)
