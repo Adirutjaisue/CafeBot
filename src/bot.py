@@ -1402,7 +1402,6 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             f"👇 **กดเลือกอาชีพ Ragnarok หรือเลือกเกมที่คุณเล่นที่ปุ่มด้านล่างนี้ได้เลยครับ:**"
         )
         await interaction.response.send_message(reply_msg, view=RolesOnlyView())
-        await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (พร้อมปุ่มเลือกอาชีพ & เกม)")
 
 # ==================== ⭐ GUI Modals เครดิต ====================
