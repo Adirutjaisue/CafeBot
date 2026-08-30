@@ -1129,6 +1129,100 @@ class ROJobSelectView(View):
         super().__init__(timeout=None)
         self.add_item(ROJobSelect(target_user_id))
 
+class ROJobButton(Button):
+    def __init__(self, job_key: str, info: dict, row: int):
+        label = info["name"].split("/")[0].strip()
+        super().__init__(
+            label=label,
+            style=discord.ButtonStyle.primary,
+            emoji=info["emoji"],
+            custom_id=f"btn_rojob_direct_{job_key}",
+            row=row
+        )
+        self.job_key = job_key
+        self.job_info = info
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = bot.get_guild(TARGET_GUILD_ID)
+        if not guild:
+            await interaction.response.send_message("❌ ไม่พบเซิร์ฟเวอร์", ephemeral=True)
+            return
+
+        try:
+            member = guild.get_member(interaction.user.id) or await guild.fetch_member(interaction.user.id)
+        except Exception:
+            member = None
+
+        if not member:
+            await interaction.response.send_message("❌ ไม่พบข้อมูลสมาชิกในเซิร์ฟเวอร์", ephemeral=True)
+            return
+
+        job_emoji = self.job_info["emoji"]
+        job_name = self.job_info["name"]
+        job_role_name = self.job_info["role"]
+
+        # 1. บันทึกข้อมูลลง Database
+        uid = str(member.id)
+        u_data = user_levels_db.get(uid, {"xp": 0, "level": 1, "base_name": extract_base_name(member.display_name)})
+        u_data["ro_job"] = self.job_key
+        u_data["job_emoji"] = job_emoji
+        user_levels_db[uid] = u_data
+        save_user_levels(user_levels_db)
+
+        # 2. มอบยศเกมหลัก Ragnarok
+        ro_main_role = discord.utils.get(guild.roles, name="🗡️・Ragnarok") or discord.utils.find(lambda r: "ragnarok" in r.name.lower(), guild.roles)
+        if ro_main_role and ro_main_role not in member.roles:
+            try:
+                await member.add_roles(ro_main_role)
+            except Exception:
+                pass
+
+        # 3. ลบยศอาชีพเก่าอื่นๆ ของ RO ออก
+        all_ro_role_names = {info["role"] for info in RAGNAROK_JOBS.values()}
+        old_ro_roles = [r for r in member.roles if r.name in all_ro_role_names and r.name != job_role_name]
+        if old_ro_roles:
+            try:
+                await member.remove_roles(*old_ro_roles)
+            except Exception:
+                pass
+
+        # 4. มอบยศอาชีพใหม่ (สร้างยศอัตโนมัติหากยังไม่มี)
+        job_role = discord.utils.get(guild.roles, name=job_role_name)
+        if not job_role:
+            try:
+                job_role = await guild.create_role(name=job_role_name, color=discord.Color.blue(), reason="Auto-created Ragnarok Job Role")
+            except Exception:
+                pass
+        if job_role and job_role not in member.roles:
+            try:
+                await member.add_roles(job_role)
+            except Exception:
+                pass
+
+        # 5. เปลี่ยนชื่อเล่นให้มีอิโมจิอาชีพนำหน้า
+        base_name = u_data.get("base_name") or extract_base_name(member.display_name)
+        current_lvl = u_data.get("level", 1)
+        final_nick = format_nickname_with_level(base_name, current_lvl, job_emoji)
+        try:
+            await member.edit(nick=final_nick)
+        except Exception:
+            pass
+
+        embed = discord.Embed(
+            title=f"⚔️ เลือกอาชีพ Ragnarok สำเร็จ! {job_emoji}",
+            description=(
+                f"ยินดีด้วยครับคุณ {member.mention}! ✨\n\n"
+                f"🏷️ **อาชีพที่เลือก:** `{job_name}` ({job_emoji})\n"
+                f"👑 **ยศที่ได้รับ:** {job_role.mention if job_role else f'`{job_role_name}`'}\n"
+                f"👤 **ชื่อใหม่ในเซิร์ฟเวอร์:** `{final_nick}`\n\n"
+                f"💡 *สามารถกดปุ่มเปลี่ยนอาชีพได้ตลอดเวลาครับ!*"
+            ),
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"[+] {member.name} กดปุ่มเลือกอาชีพ: {job_name} ({job_emoji}) -> ชื่อ: {final_nick}")
+
 class QuickGameRoleButton(Button):
     def __init__(self, game_key: str, role_name: str, emoji: str, row: int):
         super().__init__(
@@ -1171,15 +1265,25 @@ class DMRegisterView(View):
         super().__init__(timeout=None)
         # Row 0: ปุ่มตั้งชื่อเล่น
         self.add_item(Button(label="🟢 ตั้งชื่อเล่น & ปลดล็อคห้อง (คลิกที่นี่)", style=discord.ButtonStyle.success, custom_id="btn_dm_profile_modal_spaced", row=0))
-        # Row 1: ดรอปดาวน์เลือกอาชีพ RO พร้อมอิโมจิครบทุกสาย
-        self.add_item(ROJobSelect(0))
-        # Rows 2-3: ปุ่มรับยศเกมอื่นๆ
-        self.add_item(QuickGameRoleButton("val", "🎯・Valorant", "🎯", 2))
-        self.add_item(QuickGameRoleButton("rov", "⚔️・RoV", "⚔️", 2))
-        self.add_item(QuickGameRoleButton("mc", "🧱・Minecraft", "🧱", 2))
-        self.add_item(QuickGameRoleButton("roblox", "🎲・Roblox", "🎲", 3))
-        self.add_item(QuickGameRoleButton("apex", "🔫・Apex Legends", "🔫", 3))
-        self.add_item(QuickGameRoleButton("genshin", "✨・Genshin Impact", "✨", 3))
+        
+        # Rows 1-3: ปุ่มเลือกอาชีพ RO ครบทุกสาย
+        ro_jobs_list = list(RAGNAROK_JOBS.items())
+        # Row 1 (5 jobs)
+        for jkey, info in ro_jobs_list[0:5]:
+            self.add_item(ROJobButton(jkey, info, row=1))
+        # Row 2 (5 jobs)
+        for jkey, info in ro_jobs_list[5:10]:
+            self.add_item(ROJobButton(jkey, info, row=2))
+        # Row 3 (4 jobs)
+        for jkey, info in ro_jobs_list[10:14]:
+            self.add_item(ROJobButton(jkey, info, row=3))
+
+        # Row 4: ปุ่มรับยศเกมอื่นๆ
+        self.add_item(QuickGameRoleButton("val", "🎯・Valorant", "🎯", 4))
+        self.add_item(QuickGameRoleButton("rov", "⚔️・RoV", "⚔️", 4))
+        self.add_item(QuickGameRoleButton("mc", "🧱・Minecraft", "🧱", 4))
+        self.add_item(QuickGameRoleButton("roblox", "🎲・Roblox", "🎲", 4))
+        self.add_item(QuickGameRoleButton("genshin", "✨・Genshin Impact", "✨", 4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.data.get("custom_id") == "btn_dm_profile_modal_spaced":
