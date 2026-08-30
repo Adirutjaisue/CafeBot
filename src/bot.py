@@ -533,14 +533,36 @@ def render_event_announcement_embed(ev_data):
 
     if status == "balanced":
         status_label = "✅ **ปิดรับสมัครและจัดตี้เรียบร้อยแล้ว** 🚀"
-        color = discord.Color.green()
-    else:
-        status_label = f"⏳ **เปิดรับสมัครอยู่ (สรุปตี้ก่อนเริ่ม 8 นาที)**"
-        color = discord.Color.from_rgb(255, 107, 129)
+        color = discord.Color.brand_green()
+        groups = ev_data.get("groups", [])
+        if groups:
+            group_lines = []
+            for g_idx, grp in enumerate(groups, 1):
+                m_lines = []
+                for m in grp:
+                    icon = "💖" if m["role"] == "healer" else ("🛡️" if m["role"] == "tank" else "🗡️")
+                    role_label = "พระ" if m["role"] == "healer" else ("แทงค์" if m["role"] == "tank" else "DPS")
+                    m_lines.append(f"• {icon} <@{m['user_id']}> (`{m.get('ign', m['name'])}` - {role_label})")
+                group_lines.append(f"🏰 **[กลุ่มปาร์ตี้ที่ #{g_idx}] ({len(grp)}/{party_size} คน):**\n" + "\n".join(m_lines))
+            groups_section = "\n\n───────────────────────────\n\n" + "\n\n".join(group_lines)
+        else:
+            groups_section = ""
 
-    embed = discord.Embed(
-        title=f"📢 [กิจกรรมนัดตี้] {title} • {time_str} น.",
-        description=(
+        desc = (
+            f"• 🎮 **เกม:** `{game}`\n"
+            f"• ⏰ **เวลากิจกรรม:** **`{time_str} น.`**\n"
+            f"• 👥 **ขนาดปาร์ตี้ต่อ 1 กลุ่ม:** **`{party_size} คน/ตี้`**\n"
+            f"• 👑 **ผู้สร้างกิจกรรม:** <@{creator_id}>\n"
+            f"• 📌 **สถานะ:** {status_label}\n\n"
+            "───────────────────────────\n"
+            f"📊 **ยอดสมาชิกร่วมกิจกรรมทั้งหมด (`{total_joined}` คน)**"
+            + groups_section
+            + "\n\n📩 *บอทได้ส่งสรุปตี้และห้องเสียงไปในแชทส่วนตัว (DM) ของทุกคนเรียบร้อยแล้วครับ!*"
+        )
+    else:
+        status_label = f"⏳ **เปิดรับสมัครอยู่ (สรุปตี้ก่อนเริ่ม 8 นาที หรือกดจัดตี้ทันที)**"
+        color = discord.Color.from_rgb(255, 107, 129)
+        desc = (
             f"• 🎮 **เกม:** `{game}`\n"
             f"• ⏰ **เวลากิจกรรม:** **`{time_str} น.`**\n"
             f"• 👥 **ขนาดปาร์ตี้ต่อ 1 กลุ่ม:** **`{party_size} คน/ตี้`**\n"
@@ -552,9 +574,12 @@ def render_event_announcement_embed(ev_data):
             f"• 🛡️ **แทงค์ / ไนท์ (Tank):** `{tanks}` คน\n"
             f"• 🗡️ **ดาเมจ (DPS):** `{dps_count}` คน\n\n"
             "───────────────────────────\n"
-            "⏰ **ระบบจะปิดรับสมัครและกระจายตี้ให้อัตโนมัติก่อนเวลาเริ่ม 8 นาที**\n"
-            "👇 **คลิกปุ่มด้านล่างเพื่อเลือกลงชื่ออาชีพของคุณได้ทันที:**"
-        ),
+            "⏰ **ระบบจะสรุปตี้ก่อนเริ่ม 8 นาที หรือผู้สร้างกดปุ่ม [⚡ จัดตี้ทันที] ด้านล่างได้เลยครับ:**"
+        )
+
+    embed = discord.Embed(
+        title=f"📢 [กิจกรรมนัดตี้] {title} • {time_str} น.",
+        description=desc,
         color=color
     )
     embed.set_footer(text=f"Gamers' Café Event System • Event #{ev_id}")
@@ -562,11 +587,13 @@ def render_event_announcement_embed(ev_data):
 
 async def update_event_messages(guild, ev_data):
     """
-    🔄 อัปเดตการ์ดกิจกรรมในห้อง #จัดตี้เกม และ #คุยเล่น แบบเรียลไทม์เมื่อมียอดคนลงชื่อเพิ่ม
+    🔄 อัปเดตการ์ดกิจกรรมในห้อง #จัดตี้เกม และ #คุยเล่น แบบเรียลไทม์เมื่อมียอดคนลงชื่อเพิ่ม หรือเมื่อจัดตี้เสร็จ
     """
     if not guild or not ev_data:
         return
     embed = render_event_announcement_embed(ev_data)
+    is_closed = ev_data.get("status") == "balanced"
+    view = EventActionView(ev_data.get("event_id", 1), is_closed=is_closed)
     
     # 1. อัปเดตห้อง #⚔️・จัดตี้เกม
     party_mid = ev_data.get("party_msg_id") or ev_data.get("channel_msg_id")
@@ -576,7 +603,7 @@ async def update_event_messages(guild, ev_data):
             try:
                 msg = await party_ch.fetch_message(party_mid)
                 if msg:
-                    await msg.edit(embed=embed)
+                    await msg.edit(embed=embed, view=view)
             except Exception:
                 pass
 
@@ -588,7 +615,7 @@ async def update_event_messages(guild, ev_data):
             try:
                 msg = await chat_ch.fetch_message(chat_mid)
                 if msg:
-                    await msg.edit(embed=embed)
+                    await msg.edit(embed=embed, view=view)
             except Exception:
                 pass
 
@@ -710,16 +737,23 @@ class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่
         print(f"[⚔️ Event Sign-up] {interaction.user.name} ลงชื่อกิจกรรม #{self.event_id} ({my_role} | IGN: {user_ign})")
 
 class EventActionView(View):
-    def __init__(self, event_id: int):
+    def __init__(self, event_id: int, is_closed: bool = False):
         super().__init__(timeout=None)
         self.event_id = event_id
 
-        self.add_item(Button(
-            label="⚔️ ลงชื่อเข้าร่วมกิจกรรม",
-            style=discord.ButtonStyle.success,
-            custom_id=f"btn_ev_signup_{event_id}",
-            emoji="📝"
-        ))
+        if not is_closed:
+            self.add_item(Button(
+                label="⚔️ ลงชื่อเข้าร่วมกิจกรรม",
+                style=discord.ButtonStyle.success,
+                custom_id=f"btn_ev_signup_{event_id}",
+                emoji="📝"
+            ))
+            self.add_item(Button(
+                label="⚡ จัดตี้ทันที",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"btn_ev_instant_balance_{event_id}",
+                emoji="🚀"
+            ))
         self.add_item(Button(
             label="📋 ดูรายชื่อคนที่ลงแล้ว",
             style=discord.ButtonStyle.secondary,
@@ -1861,6 +1895,32 @@ class MasterCafeBot(commands.Bot):
                     default_ign = base_name
 
                 await interaction.response.send_modal(EventSignUpModal(int(ev_id_str), default_role=default_role, default_ign=default_ign))
+                return
+
+            # --- ปุ่มจัดตี้ทันทีก่อนหมดเวลา ---
+            elif custom_id.startswith("btn_ev_instant_balance_"):
+                ev_id_str = custom_id.replace("btn_ev_instant_balance_", "")
+                ev_data = events_db.get("events", {}).get(ev_id_str)
+                if not ev_data:
+                    await interaction.response.send_message("❌ ไม่พบข้อมูลกิจกรรมนี้ในระบบ", ephemeral=True)
+                    return
+
+                if ev_data.get("status") == "balanced":
+                    await interaction.response.send_message("⚠️ กิจกรรมนี้จัดตี้และปิดรับสมัครเรียบร้อยแล้วครับ!", ephemeral=True)
+                    return
+
+                participants = ev_data.get("participants", {})
+                if not participants:
+                    await interaction.response.send_message("⚠️ ยังไม่มีผู้ลงชื่อในกิจกรรมนี้ จึงยังไม่สามารถจัดตี้ได้ครับ", ephemeral=True)
+                    return
+
+                await interaction.response.send_message(
+                    f"⚡ **กำลังทำการจัดตี้กิจกรรม [{ev_data.get('title')}] และแจ้งเตือนทุกคนทันที...** 🚀",
+                    ephemeral=True
+                )
+                await execute_smart_party_balance(interaction.guild, ev_data)
+                await update_event_messages(interaction.guild, ev_data)
+                print(f"[⚡ Instant Balance] {interaction.user.name} สั่งจัดตี้ทันทีกิจกรรม #{ev_id_str}")
                 return
 
             elif custom_id.startswith("btn_ev_view_roster_"):
