@@ -967,7 +967,11 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             await interaction.response.send_message("❌ ไม่พบเซิร์ฟเวอร์", ephemeral=True)
             return
 
-        member = guild.get_member(interaction.user.id)
+        try:
+            member = guild.get_member(interaction.user.id) or await guild.fetch_member(interaction.user.id)
+        except Exception:
+            member = None
+
         if not member:
             await interaction.response.send_message("❌ คุณไม่ได้อยู่ในเซิร์ฟเวอร์", ephemeral=True)
             return
@@ -993,19 +997,33 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         except Exception:
             pass
 
-        unverified_role = discord.utils.get(guild.roles, name=UNVERIFIED_ROLE_NAME)
-        if unverified_role and unverified_role in member.roles:
+        # ปลดยศ 'ยังไม่ได้ตั้งชื่อ' ออกทั้งหมด
+        unverified_roles = [r for r in member.roles if "ยังไม่ได้ตั้งชื่อ" in r.name or r.name == UNVERIFIED_ROLE_NAME]
+        if unverified_roles:
             try:
-                await member.remove_roles(unverified_role)
+                await member.remove_roles(*unverified_roles, reason="ลงทะเบียนโปรไฟล์เสร็จสิ้น")
+                print(f"[+] ปลดยศ unverified จาก {member.name} สำเร็จ")
+            except Exception as e:
+                print(f"[!] ไม่สามารถปลดยศ unverified จาก {member.name}: {e}")
+
+        # มอบยศ 'Cafe Member'
+        member_role = (
+            discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or 
+            discord.utils.get(guild.roles, name="Cafe Member") or
+            discord.utils.find(lambda r: "Cafe Member" in r.name, guild.roles)
+        )
+        if not member_role:
+            try:
+                member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.from_rgb(255, 107, 129), reason="Auto-created member role")
             except Exception:
                 pass
 
-        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or discord.utils.get(guild.roles, name="Cafe Member")
-        if member_role:
+        if member_role and member_role not in member.roles:
             try:
-                await member.add_roles(member_role)
-            except Exception:
-                pass
+                await member.add_roles(member_role, reason="ลงทะเบียนโปรไฟล์เสร็จสิ้น")
+                print(f"[+] มอบยศ {member_role.name} ให้กับ {member.name} สำเร็จ!")
+            except Exception as e:
+                print(f"[!] ไม่สามารถมอบยศ {member_role.name} ให้ {member.name}: {e}")
 
         matched_roles = []
         for kw, rname in GAME_ROLE_MAPPING.items():
@@ -2491,19 +2509,33 @@ async def on_message(message: discord.Message):
         except Exception:
             pass
 
-        unverified_role = discord.utils.get(guild.roles, name=UNVERIFIED_ROLE_NAME)
-        if unverified_role and unverified_role in member.roles:
+        # ปลดยศ 'ยังไม่ได้ตั้งชื่อ' ออกทั้งหมด
+        unverified_roles = [r for r in member.roles if "ยังไม่ได้ตั้งชื่อ" in r.name or r.name == UNVERIFIED_ROLE_NAME]
+        if unverified_roles:
             try:
-                await member.remove_roles(unverified_role)
+                await member.remove_roles(*unverified_roles, reason="ลงทะเบียนผ่าน DM สำเร็จ")
+                print(f"[+] ปลดยศ unverified จาก {member.name} สำเร็จ")
+            except Exception as e:
+                print(f"[!] ไม่สามารถปลดยศ unverified จาก {member.name}: {e}")
+
+        # มอบยศ 'Cafe Member'
+        member_role = (
+            discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or 
+            discord.utils.get(guild.roles, name="Cafe Member") or
+            discord.utils.find(lambda r: "Cafe Member" in r.name, guild.roles)
+        )
+        if not member_role:
+            try:
+                member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.from_rgb(255, 107, 129), reason="Auto-created member role")
             except Exception:
                 pass
 
-        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or discord.utils.get(guild.roles, name="Cafe Member")
-        if member_role:
+        if member_role and member_role not in member.roles:
             try:
-                await member.add_roles(member_role)
-            except Exception:
-                pass
+                await member.add_roles(member_role, reason="ลงทะเบียนผ่าน DM สำเร็จ")
+                print(f"[+] มอบยศ {member_role.name} ให้กับ {member.name} สำเร็จ!")
+            except Exception as e:
+                print(f"[!] ไม่สามารถมอบยศ {member_role.name} ให้ {member.name}: {e}")
 
         for kw, rname in GAME_ROLE_MAPPING.items():
             if kw in user_game:
