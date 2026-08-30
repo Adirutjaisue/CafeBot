@@ -192,19 +192,20 @@ def resolve_ro_job(text: str):
 
 def check_is_ragnarok_player(text: str) -> bool:
     """
-    🎮 ตรวจสอบว่าผู้ใช้เล่น Ragnarok ทุกเวอร์ชัน (PC, Landverse, Origin, ROX, ROM, GGH, Gravity, ฯลฯ)
+    🎮 ตรวจสอบว่าผู้ใช้เล่น Ragnarok ทุกเวอร์ชัน (RO, RO M, ROX, ROM, ROW, ROO, Landverse, Origin, ฯลฯ)
     """
     if not text:
         return False
     t = text.lower().strip()
     ro_keywords = [
-        "ragnarok", "rag", "landverse", "origin", "rox", "rom", "roo", "ggh", 
-        "gravity", "แร็ค", "แรค", "แรก", "แร็ก", "แรคนารอค", "แร็คนาร็อก", "แร็คนาร็อค", "แลนด์เวอร์ส"
+        "ragnarok", "rag", "landverse", "origin", "rox", "rom", "row", "roo", "roc", "rol",
+        "ro m", "ro x", "ro w", "ro o", "ro c", "ro-m", "ro-x", "ro-w", "ro-o",
+        "ggh", "gravity", "แร็ค", "แรค", "แรก", "แร็ก", "แรคนารอค", "แร็คนาร็อก", "แร็คนาร็อค", "แลนด์เวอร์ส"
     ]
     if any(kw in t for kw in ro_keywords):
         return True
     words = re.findall(r'\b[a-zA-Z0-9_]+\b', t)
-    if "ro" in words or "rag" in words or "ragnarok" in words:
+    if any(w in words for w in ["ro", "rag", "ragnarok", "rox", "rom", "row", "roo", "roc"]):
         return True
     return False
 
