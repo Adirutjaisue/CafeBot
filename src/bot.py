@@ -2790,11 +2790,28 @@ async def on_member_remove(member):
     # 1. ลบข้อความที่ส่งไปใน DM ของผู้ใช้ที่ออกจากเซิร์ฟเวอร์
     await delete_user_verification_dms(member.id)
 
+    # 2. ถอนรายชื่อออกจากกิจกรรมที่เปิดรับสมัครอยู่ทั้งหมดทันที
+    uid_str = str(member.id)
+    events_updated = False
+    for ev_id, ev_data in list(events_db.get("events", {}).items()):
+        if ev_data.get("status") == "open":
+            participants = ev_data.get("participants", {})
+            if uid_str in participants:
+                del participants[uid_str]
+                ev_data["participants"] = participants
+                events_updated = True
+                # อัปเดตยอดคนลงชื่อบนการ์ดในห้อง #จัดตี้เกม และ #คุยเล่น แบบเรียลไทม์
+                await update_event_messages(member.guild, ev_data)
+                print(f"[-] สมาชิก {member.name} ออกจากเซิร์ฟเวอร์ -> ลบรายชื่อออกจากกิจกรรม #{ev_id} สำเร็จ")
+
+    if events_updated:
+        save_events(events_db)
+
     welcome_ch = member.guild.get_channel(WELCOME_CHANNEL_ID)
     if not welcome_ch:
         return
 
-    # 2. ลบข้อความต้อนรับเดิมของสมาชิกคนนี้ในห้อง #ต้อนรับ เพื่อความสะอาด
+    # 3. ลบข้อความต้อนรับเดิมของสมาชิกคนนี้ในห้อง #ต้อนรับ เพื่อความสะอาด
     try:
         async for msg in welcome_ch.history(limit=50):
             if msg.author == bot.user and msg.embeds:
