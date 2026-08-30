@@ -1897,8 +1897,27 @@ class MasterCafeBot(commands.Bot):
                 await interaction.response.send_modal(EventSignUpModal(int(ev_id_str), default_role=default_role, default_ign=default_ign))
                 return
 
-            # --- ปุ่มจัดตี้ทันทีก่อนหมดเวลา ---
+            # --- ปุ่มจัดตี้ทันทีก่อนหมดเวลา (เฉพาะ Admin เท่านั้น) ---
             elif custom_id.startswith("btn_ev_instant_balance_"):
+                guild = interaction.guild or bot.get_guild(TARGET_GUILD_ID)
+                member = interaction.user
+                if guild and not isinstance(member, discord.Member):
+                    member = guild.get_member(interaction.user.id)
+
+                is_admin = False
+                if member:
+                    if getattr(member, "guild_permissions", None) and (member.guild_permissions.administrator or member.guild_permissions.manage_guild):
+                        is_admin = True
+                    elif guild and member.id == guild.owner_id:
+                        is_admin = True
+
+                if not is_admin:
+                    await interaction.response.send_message(
+                        "⛔ **เฉพาะผู้ดูแลเซิร์ฟเวอร์ (Admin) เท่านั้นที่สามารถกดจัดตี้ทันทีได้ครับ!**",
+                        ephemeral=True
+                    )
+                    return
+
                 ev_id_str = custom_id.replace("btn_ev_instant_balance_", "")
                 ev_data = events_db.get("events", {}).get(ev_id_str)
                 if not ev_data:
@@ -1920,7 +1939,7 @@ class MasterCafeBot(commands.Bot):
                 )
                 await execute_smart_party_balance(interaction.guild, ev_data)
                 await update_event_messages(interaction.guild, ev_data)
-                print(f"[⚡ Instant Balance] {interaction.user.name} สั่งจัดตี้ทันทีกิจกรรม #{ev_id_str}")
+                print(f"[⚡ Instant Balance by Admin] {interaction.user.name} สั่งจัดตี้ทันทีกิจกรรม #{ev_id_str}")
                 return
 
             elif custom_id.startswith("btn_ev_view_roster_"):
