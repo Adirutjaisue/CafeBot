@@ -1129,40 +1129,63 @@ class ROJobSelectView(View):
         super().__init__(timeout=None)
         self.add_item(ROJobSelect(target_user_id))
 
+class QuickGameRoleButton(Button):
+    def __init__(self, game_key: str, role_name: str, emoji: str, row: int):
+        super().__init__(
+            label=role_name.split("・")[-1],
+            style=discord.ButtonStyle.secondary,
+            emoji=emoji,
+            custom_id=f"btn_quick_role_{game_key}",
+            row=row
+        )
+        self.role_name = role_name
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = bot.get_guild(TARGET_GUILD_ID)
+        if not guild:
+            await interaction.response.send_message("❌ ไม่พบเซิร์ฟเวอร์", ephemeral=True)
+            return
+        try:
+            member = guild.get_member(interaction.user.id) or await guild.fetch_member(interaction.user.id)
+        except Exception:
+            member = None
+        if not member:
+            await interaction.response.send_message("❌ ไม่พบสมาชิกในเซิร์ฟเวอร์", ephemeral=True)
+            return
+        role = discord.utils.get(guild.roles, name=self.role_name) or discord.utils.find(lambda r: self.label.lower() in r.name.lower(), guild.roles)
+        if not role:
+            try:
+                role = await guild.create_role(name=self.role_name, reason="Auto-created Game Role")
+            except Exception:
+                pass
+        if role:
+            if role in member.roles:
+                await member.remove_roles(role)
+                await interaction.response.send_message(f"➖ ยกเลิกยศ `{role.name}` เรียบร้อยแล้วครับ", ephemeral=True)
+            else:
+                await member.add_roles(role)
+                await interaction.response.send_message(f"➕ รับยศ `{role.name}` เรียบร้อยแล้วครับ! 🎉", ephemeral=True)
+
 class DMRegisterView(View):
     def __init__(self):
         super().__init__(timeout=None)
+        # Row 0: ปุ่มตั้งชื่อเล่น
+        self.add_item(Button(label="🟢 ตั้งชื่อเล่น & ปลดล็อคห้อง (คลิกที่นี่)", style=discord.ButtonStyle.success, custom_id="btn_dm_profile_modal_spaced", row=0))
+        # Row 1: ดรอปดาวน์เลือกอาชีพ RO พร้อมอิโมจิครบทุกสาย
+        self.add_item(ROJobSelect(0))
+        # Rows 2-3: ปุ่มรับยศเกมอื่นๆ
+        self.add_item(QuickGameRoleButton("val", "🎯・Valorant", "🎯", 2))
+        self.add_item(QuickGameRoleButton("rov", "⚔️・RoV", "⚔️", 2))
+        self.add_item(QuickGameRoleButton("mc", "🧱・Minecraft", "🧱", 2))
+        self.add_item(QuickGameRoleButton("roblox", "🎲・Roblox", "🎲", 3))
+        self.add_item(QuickGameRoleButton("apex", "🔫・Apex Legends", "🔫", 3))
+        self.add_item(QuickGameRoleButton("genshin", "✨・Genshin Impact", "✨", 3))
 
-    @discord.ui.button(
-        label="🟢 1. กรอกชื่อเล่น & ปลดล็อคห้อง",
-        style=discord.ButtonStyle.success,
-        custom_id="btn_dm_profile_modal_spaced",
-        row=0
-    )
-    async def open_modal_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(GamerProfileModal())
-
-    @discord.ui.button(
-        label="⚔️ 2. ฉันเล่น Ragnarok (เลือกอาชีพ & ใส่อิโมจิหน้าชื่อ)",
-        style=discord.ButtonStyle.primary,
-        custom_id="btn_dm_pick_ro_job",
-        row=1
-    )
-    async def pick_ro_job_button(self, interaction: discord.Interaction, button: Button):
-        embed = discord.Embed(
-            title="⚔️ เมนูเลือกอาชีพ Ragnarok Online 🎮",
-            description=(
-                f"สวัสดีครับคุณ {interaction.user.mention}! 🏰\n\n"
-                "กรุณาเลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:\n\n"
-                "✨ **เมื่อเลือกแล้ว:**\n"
-                "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
-                "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์อัตโนมัติ**\n"
-                "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
-            ),
-            color=discord.Color.gold()
-        )
-        embed.set_thumbnail(url="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80")
-        await interaction.response.send_message(embed=embed, view=ROJobSelectView(interaction.user.id), ephemeral=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.data.get("custom_id") == "btn_dm_profile_modal_spaced":
+            await interaction.response.send_modal(GamerProfileModal())
+            return False
+        return True
 
 class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น & ข้อมูลเกม"):
     nickname_input = TextInput(
@@ -1179,26 +1202,10 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         max_length=20,
         required=False
     )
-    games_input = TextInput(
-        label="3. เกมที่คุณเล่น (Games Played)",
-        placeholder="เช่น Ragnarok, Valorant, RoV, Roblox, Minecraft",
-        min_length=1,
-        max_length=100,
-        required=False
-    )
-    ro_job_input = TextInput(
-        label="4. อาชีพใน Ragnarok (ถ้าเล่น RO)",
-        placeholder="เช่น ไนท์, พรีส, วิสาด, ฮัน, แอส, ม้อง, พาลา, ช่าง, ฯลฯ",
-        min_length=0,
-        max_length=30,
-        required=False
-    )
 
     async def on_submit(self, interaction: discord.Interaction):
         user_nick = self.nickname_input.value.strip()
         user_ign = self.ign_input.value.strip()
-        user_games_text = self.games_input.value.strip().lower()
-        user_ro_job_text = self.ro_job_input.value.strip()
 
         guild = bot.get_guild(TARGET_GUILD_ID)
         if not guild:
@@ -1224,20 +1231,11 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         current_lvl = current_data.get("level", 1)
         current_data["base_name"] = base_name
 
-        # ⚔️ ตรวจสอบอาชีพ Ragnarok จากช่องที่ 4 หรือจากช่องเกม
-        jkey, jname, jem = resolve_ro_job(user_ro_job_text)
-        if not jkey and check_is_ragnarok_player(user_games_text):
-            jkey, jname, jem = resolve_ro_job(user_games_text)
-
-        if jkey:
-            current_data["ro_job"] = jkey
-            current_data["job_emoji"] = jem
-
         user_levels_db[uid] = current_data
         save_user_levels(user_levels_db)
 
         starting_coins = add_user_coins(uid, 100)
-        final_name = format_nickname_with_level(base_name, current_lvl, jem or current_data.get("job_emoji", ""))
+        final_name = format_nickname_with_level(base_name, current_lvl, current_data.get("job_emoji", ""))
 
         try:
             await member.edit(nick=final_name)
