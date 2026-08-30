@@ -1260,6 +1260,27 @@ class QuickGameRoleButton(Button):
                 await member.add_roles(role)
                 await interaction.response.send_message(f"➕ รับยศ `{role.name}` เรียบร้อยแล้วครับ! 🎉", ephemeral=True)
 
+class RolesOnlyView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        ro_jobs_list = list(RAGNAROK_JOBS.items())
+        # Row 0 (5 jobs)
+        for jkey, info in ro_jobs_list[0:5]:
+            self.add_item(ROJobButton(jkey, info, row=0))
+        # Row 1 (5 jobs)
+        for jkey, info in ro_jobs_list[5:10]:
+            self.add_item(ROJobButton(jkey, info, row=1))
+        # Row 2 (4 jobs)
+        for jkey, info in ro_jobs_list[10:14]:
+            self.add_item(ROJobButton(jkey, info, row=2))
+
+        # Row 3: ปุ่มรับยศเกมอื่นๆ
+        self.add_item(QuickGameRoleButton("val", "🎯・Valorant", "🎯", 3))
+        self.add_item(QuickGameRoleButton("rov", "⚔️・RoV", "⚔️", 3))
+        self.add_item(QuickGameRoleButton("mc", "🧱・Minecraft", "🧱", 3))
+        self.add_item(QuickGameRoleButton("roblox", "🎲・Roblox", "🎲", 3))
+        self.add_item(QuickGameRoleButton("genshin", "✨・Genshin Impact", "✨", 3))
+
 class DMRegisterView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -1370,16 +1391,18 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             except Exception as e:
                 print(f"[!] ไม่สามารถมอบยศ {member_role.name} ให้ {member.name}: {e}")
 
+        role_display_name = f"`{member_role.name}`" if member_role else "`Cafe Member`"
         reply_msg = (
             f"✅ **ตั้งค่าโปรไฟล์สำเร็จแล้วครับ!** 🎉\n\n"
             f"• 👤 **ชื่อของคุณในเซิร์ฟเวอร์:** `{final_name}`\n"
             f"• ⭐ **เลเวลเริ่มต้น:** `Lv.{current_lvl}`\n"
             f"• 🪙 **เหรียญขวัญถุงต้อนรับ:** `+{starting_coins:,} ☕ Coins`\n"
-            f"• 👑 **ยศที่ได้รับ:** {member_role.mention if member_role else '`Cafe Member`'}\n\n"
+            f"• 👑 **ยศที่ได้รับ:** {role_display_name}\n\n"
             f"🔓 **ปลดล็อคห้องทั้งหมดในเซิร์ฟเวอร์ Gamers’ Café เรียบร้อยแล้ว**\n"
             f"👇 **กดเลือกอาชีพ Ragnarok หรือเลือกเกมที่คุณเล่นที่ปุ่มด้านล่างนี้ได้เลยครับ:**"
         )
-        await interaction.response.send_message(reply_msg, view=DMRegisterView())
+        await interaction.response.send_message(reply_msg, view=RolesOnlyView())
+        await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (พร้อมปุ่มเลือกอาชีพ & เกม)")
 
 # ==================== ⭐ GUI Modals เครดิต ====================
@@ -1688,6 +1711,7 @@ class MasterCafeBot(commands.Bot):
 
     async def setup_hook(self):
         self.add_view(DMRegisterView())
+        self.add_view(RolesOnlyView())
         self.add_view(ROJobSelectView(0))
         self.add_view(DailyClaimView())
         self.add_view(MarketRepActionView())
