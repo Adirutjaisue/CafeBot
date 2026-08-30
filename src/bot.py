@@ -743,22 +743,22 @@ class EventActionView(View):
 
         if not is_closed:
             self.add_item(Button(
-                label="⚔️ ลงชื่อเข้าร่วมกิจกรรม",
+                label="ลงชื่อเข้าร่วมกิจกรรม",
                 style=discord.ButtonStyle.success,
                 custom_id=f"btn_ev_signup_{event_id}",
-                emoji="📝"
+                emoji="⚔️"
             ))
             self.add_item(Button(
-                label="⚡ จัดตี้ทันที",
+                label="จัดตี้ทันที",
                 style=discord.ButtonStyle.primary,
                 custom_id=f"btn_ev_instant_balance_{event_id}",
-                emoji="🚀"
+                emoji="⚡"
             ))
         self.add_item(Button(
-            label="📋 ดูรายชื่อคนที่ลงแล้ว",
+            label="ดูรายชื่อคนที่ลงแล้ว",
             style=discord.ButtonStyle.secondary,
             custom_id=f"btn_ev_view_roster_{event_id}",
-            emoji="👥"
+            emoji="📋"
         ))
 
 class CreateEventModal(Modal, title="📢 สร้างกิจกรรมนัดตี้ & ประกาศทุกคน"):
