@@ -1022,20 +1022,16 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             pass
 
         # ปลดยศ 'ยังไม่ได้ตั้งชื่อ' ออกทั้งหมด
-        unverified_roles = [r for r in member.roles if "ยังไม่ได้ตั้งชื่อ" in r.name or r.name == UNVERIFIED_ROLE_NAME]
-        if unverified_roles:
+        unverified_role = get_unverified_role(guild)
+        if unverified_role and unverified_role in member.roles:
             try:
-                await member.remove_roles(*unverified_roles, reason="ลงทะเบียนโปรไฟล์เสร็จสิ้น")
-                print(f"[+] ปลดยศ unverified จาก {member.name} สำเร็จ")
+                await member.remove_roles(unverified_role, reason="ลงทะเบียนโปรไฟล์เสร็จสิ้น")
+                print(f"[+] ปลดยศ {unverified_role.name} จาก {member.name} สำเร็จ")
             except Exception as e:
                 print(f"[!] ไม่สามารถปลดยศ unverified จาก {member.name}: {e}")
 
         # มอบยศ 'Cafe Member'
-        member_role = (
-            discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or 
-            discord.utils.get(guild.roles, name="Cafe Member") or
-            discord.utils.find(lambda r: "Cafe Member" in r.name, guild.roles)
-        )
+        member_role = get_member_role(guild)
         if not member_role:
             try:
                 member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.from_rgb(255, 107, 129), reason="Auto-created member role")
@@ -1052,13 +1048,16 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         matched_roles = []
         for kw, rname in GAME_ROLE_MAPPING.items():
             if kw in user_games_text:
-                r = discord.utils.get(guild.roles, name=rname)
+                r = (
+                    discord.utils.get(guild.roles, name=rname) or
+                    discord.utils.find(lambda x: kw in x.name.lower() or rname.split("・")[-1].lower() in x.name.lower(), guild.roles)
+                )
                 if r and r not in member.roles:
                     try:
                         await member.add_roles(r)
                         matched_roles.append(r.name)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[!] ไม่สามารถมอบยศเกม {r.name}: {e}")
 
         roles_display = ", ".join([f"`{r}`" for r in matched_roles]) if matched_roles else "`สมาชิกทั่วไป`"
         
@@ -2554,20 +2553,16 @@ async def on_message(message: discord.Message):
             pass
 
         # ปลดยศ 'ยังไม่ได้ตั้งชื่อ' ออกทั้งหมด
-        unverified_roles = [r for r in member.roles if "ยังไม่ได้ตั้งชื่อ" in r.name or r.name == UNVERIFIED_ROLE_NAME]
-        if unverified_roles:
+        unverified_role = get_unverified_role(guild)
+        if unverified_role and unverified_role in member.roles:
             try:
-                await member.remove_roles(*unverified_roles, reason="ลงทะเบียนผ่าน DM สำเร็จ")
-                print(f"[+] ปลดยศ unverified จาก {member.name} สำเร็จ")
+                await member.remove_roles(unverified_role, reason="ลงทะเบียนผ่าน DM สำเร็จ")
+                print(f"[+] ปลดยศ {unverified_role.name} จาก {member.name} สำเร็จ")
             except Exception as e:
                 print(f"[!] ไม่สามารถปลดยศ unverified จาก {member.name}: {e}")
 
         # มอบยศ 'Cafe Member'
-        member_role = (
-            discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or 
-            discord.utils.get(guild.roles, name="Cafe Member") or
-            discord.utils.find(lambda r: "Cafe Member" in r.name, guild.roles)
-        )
+        member_role = get_member_role(guild)
         if not member_role:
             try:
                 member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.from_rgb(255, 107, 129), reason="Auto-created member role")
