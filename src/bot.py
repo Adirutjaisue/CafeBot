@@ -190,6 +190,24 @@ def resolve_ro_job(text: str):
                     return jkey, info["name"], info["emoji"]
     return None, None, None
 
+def check_is_ragnarok_player(text: str) -> bool:
+    """
+    🎮 ตรวจสอบว่าผู้ใช้เล่น Ragnarok ทุกเวอร์ชัน (PC, Landverse, Origin, ROX, ROM, GGH, Gravity, ฯลฯ)
+    """
+    if not text:
+        return False
+    t = text.lower().strip()
+    ro_keywords = [
+        "ragnarok", "rag", "landverse", "origin", "rox", "rom", "roo", "ggh", 
+        "gravity", "แร็ค", "แรค", "แรก", "แร็ก", "แรคนารอค", "แร็คนาร็อก", "แร็คนาร็อค", "แลนด์เวอร์ส"
+    ]
+    if any(kw in t for kw in ro_keywords):
+        return True
+    words = re.findall(r'\b[a-zA-Z0-9_]+\b', t)
+    if "ro" in words or "rag" in words or "ragnarok" in words:
+        return True
+    return False
+
 SHOP_ITEMS = {
     "1": {"name": "🌸・Sakura Pink", "price": 500, "desc": "ยศสีชื่อชมพูซากุระ"},
     "2": {"name": "🌊・Ocean Blue", "price": 500, "desc": "ยศสีฟ้าน้ำทะเล"},
@@ -1278,9 +1296,9 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
 
-        # ถ้าผู้ใช้เล่น Ragnarok ให้ส่งเมนูเลือกอาชีพทันที
-        is_ro = any(kw in user_games_text for kw in ["ragnarok", "rag", "ro"])
-        if is_ro:
+        # ถ้าผู้ใช้เล่น Ragnarok (ทุกเวอร์ชัน) และยังไม่ได้เลือกอาชีพมา ให้ส่งเมนูดรอปดาวน์เลือกอาชีพทันที
+        is_ro = check_is_ragnarok_player(user_games_text) or check_is_ragnarok_player(user_ro_job_text) or bool(user_ro_job_text)
+        if is_ro and not jkey:
             ro_prompt_embed = discord.Embed(
                 title="⚔️ คุณเล่น Ragnarok! กรุณาเลือกอาชีพของคุณ 🎮",
                 description=(
@@ -2824,8 +2842,8 @@ async def on_message(message: discord.Message):
         await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} ยืนยันผ่าน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
 
-        # ถ้าผู้ใช้เล่น Ragnarok ให้ส่งเมนูเลือกอาชีพทันที
-        is_ro = any(kw in user_game for kw in ["ragnarok", "rag", "ro"])
+        # ถ้าผู้ใช้เล่น Ragnarok (ทุกเวอร์ชัน) ให้ส่งเมนูเลือกอาชีพทันที
+        is_ro = check_is_ragnarok_player(user_game)
         if is_ro:
             ro_prompt_embed = discord.Embed(
                 title="⚔️ คุณเล่น Ragnarok! กรุณาเลือกอาชีพของคุณ 🎮",
