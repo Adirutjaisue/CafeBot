@@ -161,6 +161,35 @@ RAGNAROK_JOBS = {
     "doram": {"name": "Doram (เผ่าแมว)", "emoji": "🐱", "role": "🐱・Doram (แมว)", "desc": "เผ่าแมวน้อย สกิลพืช/สัตว์/เวท ครบเครื่อง"}
 }
 
+RO_JOB_KEYWORD_MAPPING = {
+    "knight": ["knight", "lord knight", "lk", "ไนท์", "ลอร์ดไนท์", "ดาบ", "หอก", "rk", "rune knight"],
+    "crusader": ["crusader", "paladin", "pala", "ครู", "ครูเซเดอร์", "พาลา", "พาลาดิน", "โล่", "rg", "royal guard"],
+    "wizard": ["wizard", "high wizard", "hw", "วิ", "วิสาด", "ไฮวิ", "เวท", "wl", "warlock"],
+    "sage": ["sage", "professor", "prof", "เสจ", "พรอฟ", "โปรฟ", "sorcerer"],
+    "hunter": ["hunter", "sniper", "snip", "ฮัน", "ฮันเตอร์", "สไน", "สไนเปอร์", "ธนู", "ranger", "เรนเจอร์"],
+    "bard_dancer": ["bard", "dancer", "clown", "gypsy", "แดน", "แดนเซอร์", "บาร์ด", "ตัวเต้น", "ตัวร้อง", "minstrel", "wanderer"],
+    "assassin": ["assassin", "assassin cross", "sinx", "sin", "แอส", "แอสครอส", "ซิน", "มีด", "กาตาร์", "gx", "guillotine cross"],
+    "rogue": ["rogue", "stalker", "sc", "shadow chaser", "โร้ค", "สโต๊ก", "สตอเกอร์", "ตัวปลด"],
+    "priest": ["priest", "high priest", "hp", "พรีส", "ไฮพรีส", "พระ", "ฮีล", "ab", "archbishop"],
+    "monk": ["monk", "champion", "champ", "ม้อง", "มอง", "แชมป์", "แชมเปี้ยน", "อาชู", "sura", "สุระ"],
+    "blacksmith": ["blacksmith", "whitesmith", "ws", "bs", "ช่าง", "ตีดาบ", "พ่อค้า", "ไวท์สมิท", "nc", "mechanic"],
+    "alchemist": ["alchemist", "creator", "gene", "genetic", "เคมิส", "อัลเคมิส", "ครีเอเตอร์", "ปายา"],
+    "gunslinger_ninja": ["gunslinger", "ninja", "gun", "ปืน", "นินจา", "ดาวกระจาย", "rebellion", "kagerou", "oboro"],
+    "doram": ["doram", "summoner", "แมว", "เผ่าแมว", "โดรัม"]
+}
+
+def resolve_ro_job(text: str):
+    if not text:
+        return None, None, None
+    clean = text.lower().strip()
+    for jkey, keywords in RO_JOB_KEYWORD_MAPPING.items():
+        for kw in keywords:
+            if kw in clean:
+                info = RAGNAROK_JOBS.get(jkey)
+                if info:
+                    return jkey, info["name"], info["emoji"]
+    return None, None, None
+
 SHOP_ITEMS = {
     "1": {"name": "🌸・Sakura Pink", "price": 500, "desc": "ยศสีชื่อชมพูซากุระ"},
     "2": {"name": "🌊・Ocean Blue", "price": 500, "desc": "ยศสีฟ้าน้ำทะเล"},
@@ -1115,11 +1144,20 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         max_length=100,
         required=False
     )
+    ro_job_input = TextInput(
+        label="4. อาชีพใน Ragnarok (ถ้าเล่น RO)",
+        placeholder="เช่น Knight, Wizard, Priest, Hunter, SinX, Monk, ฯลฯ",
+        min_length=0,
+        max_length=30,
+        required=False
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         user_nick = self.nickname_input.value.strip()
         user_ign = self.ign_input.value.strip()
         user_games_text = self.games_input.value.strip().lower()
+        user_ro_job_text = self.ro_job_input.value.strip()
+
         guild = bot.get_guild(TARGET_GUILD_ID)
         if not guild:
             await interaction.response.send_message("❌ ไม่พบเซิร์ฟเวอร์", ephemeral=True)
@@ -1142,13 +1180,22 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         uid = str(member.id)
         current_data = user_levels_db.get(uid, {"xp": 0, "level": 1})
         current_lvl = current_data.get("level", 1)
-        
         current_data["base_name"] = base_name
+
+        # ⚔️ ตรวจสอบอาชีพ Ragnarok จากช่องที่ 4 หรือจากช่องเกม
+        jkey, jname, jem = resolve_ro_job(user_ro_job_text)
+        if not jkey and ("ragnarok" in user_games_text or "ro" in user_games_text or "rag" in user_games_text):
+            jkey, jname, jem = resolve_ro_job(user_games_text)
+
+        if jkey:
+            current_data["ro_job"] = jkey
+            current_data["job_emoji"] = jem
+
         user_levels_db[uid] = current_data
         save_user_levels(user_levels_db)
 
         starting_coins = add_user_coins(uid, 100)
-        final_name = format_nickname_with_level(base_name, current_lvl)
+        final_name = format_nickname_with_level(base_name, current_lvl, jem or current_data.get("job_emoji", ""))
 
         try:
             await member.edit(nick=final_name)
@@ -1192,6 +1239,30 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
                         matched_roles.append(r.name)
                     except Exception as e:
                         print(f"[!] ไม่สามารถมอบยศเกม {r.name}: {e}")
+
+        # ⚔️ มอบยศอาชีพ Ragnarok ทันทีหากระบุอาชีพมา
+        if jkey:
+            job_info = RAGNAROK_JOBS.get(jkey)
+            if job_info:
+                job_role_name = job_info["role"]
+                job_role = discord.utils.get(guild.roles, name=job_role_name)
+                if not job_role:
+                    try:
+                        job_role = await guild.create_role(name=job_role_name, color=discord.Color.blue(), reason="Auto-created RO Job Role")
+                    except Exception:
+                        pass
+                if job_role and job_role not in member.roles:
+                    try:
+                        await member.add_roles(job_role)
+                        matched_roles.append(f"{job_info['emoji']} {job_info['name']}")
+                    except Exception:
+                        pass
+                ro_main = discord.utils.get(guild.roles, name="🗡️・Ragnarok")
+                if ro_main and ro_main not in member.roles:
+                    try:
+                        await member.add_roles(ro_main)
+                    except Exception:
+                        pass
 
         roles_display = ", ".join([f"`{r}`" for r in matched_roles]) if matched_roles else "`สมาชิกทั่วไป`"
         
