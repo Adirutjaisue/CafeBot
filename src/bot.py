@@ -82,6 +82,29 @@ THAI_MONTHS = [
 
 temp_party_rooms = set()
 xp_cooldowns = {}
+verification_dm_map = {} # เก็บ [m1.id, m2.id] สำหรับลบข้อความต้อนรับใน DM หลังกรอกเสร็จหรือตอนออกจากเซิร์ฟเวอร์
+
+async def delete_user_verification_dms(user_id: int):
+    """
+    🧹 ลบข้อความชวนกรอกชื่อใน DM เมื่อผู้ใช้กรอกเสร็จแล้ว หรือเมื่อผู้ใช้ออกจากเซิร์ฟเวอร์
+    """
+    uid_str = str(user_id)
+    if uid_str in verification_dm_map:
+        msg_ids = verification_dm_map[uid_str]
+        try:
+            user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
+            if user_obj:
+                dm_ch = getattr(user_obj, "dm_channel", None) or await user_obj.create_dm()
+                for mid in msg_ids:
+                    try:
+                        m_to_del = await dm_ch.fetch_message(mid)
+                        if m_to_del:
+                            await m_to_del.delete()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        del verification_dm_map[uid_str]
 
 GAME_ROLE_MAPPING = {
     "ragnarok": "🗡️・Ragnarok",
@@ -1006,7 +1029,8 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             f"🔓 **ปลดล็อคห้องทั้งหมดในเซิร์ฟเวอร์ Gamers’ Café เรียบร้อยแล้ว** ไปลุยเล่นเกมกับเพื่อนๆ ได้เลยครับ! ☕🎮"
         )
         await interaction.response.send_message(reply_msg)
-        print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}'")
+        await delete_user_verification_dms(member.id)
+        print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
 
 # ==================== ⭐ GUI Modals เครดิต ====================
 
@@ -1668,13 +1692,14 @@ async def send_dm_verification(member):
     )
     embed.set_footer(text="Gamers' Café • Welcome System")
     try:
-        await member.send(embed=embed)
+        m1 = await member.send(embed=embed)
         await asyncio.sleep(0.3)
-        await member.send(
+        m2 = await member.send(
             content="👇 **คลิกที่ปุ่มด้านล่างนี้เพื่อเปิดฟอร์มกรอกชื่อ:**",
             view=DMRegisterView()
         )
-        print(f"[+] ส่งแชทส่วนตัว (DM) ไปหา {member.name} สำเร็จ!")
+        verification_dm_map[str(member.id)] = [m1.id, m2.id]
+        print(f"[+] ส่งแชทส่วนตัว (DM) ไปหา {member.name} สำเร็จ! (บันทึก ID สำหรับลบอัตโนมัติ)")
     except discord.Forbidden:
         print(f"[!] ไม่สามารถส่ง DM หา {member.name} ได้ (ผู้ใช้ปิดรับข้อความส่วนตัว)")
 
@@ -2265,9 +2290,25 @@ async def on_member_join(member):
 
 @bot.event
 async def on_member_remove(member):
+    # 1. ลบข้อความที่ส่งไปใน DM ของผู้ใช้ที่ออกจากเซิร์ฟเวอร์
+    await delete_user_verification_dms(member.id)
+
     welcome_ch = member.guild.get_channel(WELCOME_CHANNEL_ID)
     if not welcome_ch:
         return
+
+    # 2. ลบข้อความต้อนรับเดิมของสมาชิกคนนี้ในห้อง #ต้อนรับ เพื่อความสะอาด
+    try:
+        async for msg in welcome_ch.history(limit=50):
+            if msg.author == bot.user and msg.embeds:
+                emb = msg.embeds[0]
+                footer_text = getattr(emb.footer, 'text', '') or ''
+                desc_text = emb.description or ''
+                if str(member.id) in footer_text or member.name in desc_text:
+                    await msg.delete()
+                    await asyncio.sleep(0.3)
+    except Exception:
+        pass
 
     embed = discord.Embed(
         title="🚪 สมาชิกออกจากเซิร์ฟเวอร์",
@@ -2485,7 +2526,8 @@ async def on_message(message: discord.Message):
             color=discord.Color.green()
         )
         await message.channel.send(embed=success_embed)
-        print(f"[+] สมาชิก {member.name} ยืนยันผ่าน DM: '{final_name}'")
+        await delete_user_verification_dms(member.id)
+        print(f"[+] สมาชิก {member.name} ยืนยันผ่าน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
         return
 
     # 2. จัดการเมื่อพิมพ์ในห้องเซิร์ฟเวอร์ (ถ้ายังไม่ยืนยันตัวตน)
