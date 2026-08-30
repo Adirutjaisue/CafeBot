@@ -1965,6 +1965,62 @@ async def on_scheduled_event_create(event: discord.ScheduledEvent):
 
     print(f"[📢 Server Event Linked] บอทตรวจพบกิจกรรมของ Server: {event.name} ({time_str} น.) ซิงค์เข้าระบบจัดตี้อัตโนมัติสำเร็จ!")
 
+async def purge_event_completely(guild: discord.Guild, target_ev_id: str, target_data: dict):
+    """
+    🗑️ ฟังก์ชันลบประกาศกิจกรรมทั้งหมด: ลบใน #จัดตี้เกม, #คุยเล่น และลบแชทส่วนตัว (DM) ของทุกคนแบบขนาน (Parallel) ทันที
+    """
+    if not target_data:
+        return
+
+    # 1. ลบข้อความในห้อง #⚔️・จัดตี้เกม
+    if "party_msg_id" in target_data:
+        party_ch = guild.get_channel(PARTY_CHANNEL_ID)
+        if party_ch:
+            try:
+                p_msg = await party_ch.fetch_message(target_data["party_msg_id"])
+                if p_msg:
+                    await p_msg.delete()
+                    print(f"[🗑️] ลบข้อความประกาศกิจกรรม #{target_ev_id} ในห้อง #จัดตี้เกม สำเร็จ")
+            except Exception:
+                pass
+
+    # 2. ลบข้อความในห้อง #คุยเล่น
+    if "chat_msg_id" in target_data:
+        chat_ch = guild.get_channel(CHAT_CHANNEL_ID)
+        if chat_ch:
+            try:
+                c_msg = await chat_ch.fetch_message(target_data["chat_msg_id"])
+                if c_msg:
+                    await c_msg.delete()
+                    print(f"[🗑️] ลบข้อความประกาศกิจกรรม #{target_ev_id} ในห้อง #คุยเล่น สำเร็จ")
+            except Exception:
+                pass
+
+    # 3. ลบข้อความใน DM ของทุกคนแบบขนาน (Parallel)
+    dm_map = target_data.get("dm_msg_ids", {})
+    async def delete_single_dm(uid_str, msg_id):
+        try:
+            m_obj = guild.get_member(int(uid_str))
+            if not m_obj:
+                m_obj = await bot.fetch_user(int(uid_str))
+            if m_obj:
+                dm_ch = getattr(m_obj, "dm_channel", None) or await m_obj.create_dm()
+                dm_msg = await dm_ch.fetch_message(msg_id)
+                if dm_msg:
+                    await dm_msg.delete()
+        except Exception:
+            pass
+
+    if dm_map:
+        await asyncio.gather(*[delete_single_dm(uid, mid) for uid, mid in dm_map.items()], return_exceptions=True)
+        print(f"[🗑️] ลบข้อความ DM ชวนร่วมกิจกรรม #{target_ev_id} ทั้งหมด ({len(dm_map)} คน) สำเร็จ!")
+
+    # 4. ลบออกจากฐานข้อมูล
+    if target_ev_id in events_db.get("events", {}):
+        del events_db["events"][target_ev_id]
+        save_events(events_db)
+    print(f"[🗑️ Purged Event] ยกเลิกและลบข้อความประกาศกิจกรรม #{target_ev_id} ทุกช่องทางเรียบร้อยแล้ว!")
+
 @bot.event
 async def on_scheduled_event_delete(event: discord.ScheduledEvent):
     """
@@ -1974,7 +2030,6 @@ async def on_scheduled_event_delete(event: discord.ScheduledEvent):
     if guild.id != TARGET_GUILD_ID:
         return
 
-    # ค้นหากิจกรรมที่ตรงกับ discord_event_id
     target_ev_id = None
     target_data = None
     for eid, ev in list(events_db.get("events", {}).items()):
@@ -1983,48 +2038,30 @@ async def on_scheduled_event_delete(event: discord.ScheduledEvent):
             target_data = ev
             break
 
-    if target_data:
-        # 1. ลบข้อความในห้อง #⚔️・จัดตี้เกม
-        if "party_msg_id" in target_data:
-            party_ch = guild.get_channel(PARTY_CHANNEL_ID)
-            if party_ch:
-                try:
-                    p_msg = await party_ch.fetch_message(target_data["party_msg_id"])
-                    if p_msg:
-                        await p_msg.delete()
-                        print(f"[🗑️] ลบข้อความประกาศกิจกรรม #{target_ev_id} ในห้อง #จัดตี้เกม สำเร็จ")
-                except Exception:
-                    pass
+    if target_data and target_ev_id:
+        await purge_event_completely(guild, target_ev_id, target_data)
 
-        # 2. ลบข้อความในห้อง #คุยเล่น
-        if "chat_msg_id" in target_data:
-            chat_ch = guild.get_channel(CHAT_CHANNEL_ID)
-            if chat_ch:
-                try:
-                    c_msg = await chat_ch.fetch_message(target_data["chat_msg_id"])
-                    if c_msg:
-                        await c_msg.delete()
-                        print(f"[🗑️] ลบข้อความประกาศกิจกรรม #{target_ev_id} ในห้อง #คุยเล่น สำเร็จ")
-                except Exception:
-                    pass
+@bot.event
+async def on_scheduled_event_update(before: discord.ScheduledEvent, after: discord.ScheduledEvent):
+    """
+    🔄 ดักจับเมื่อกิจกรรมถูกกดยกเลิก (Cancelled) หรือสิ้นสุด (Completed)
+    """
+    guild = after.guild
+    if guild.id != TARGET_GUILD_ID:
+        return
 
-        # 3. ลบข้อความใน DM ของทุกคน
-        dm_map = target_data.get("dm_msg_ids", {})
-        for uid_str, msg_id in dm_map.items():
-            try:
-                m_obj = guild.get_member(int(uid_str))
-                if m_obj:
-                    dm_ch = m_obj.dm_channel or await m_obj.create_dm()
-                    dm_msg = await dm_ch.fetch_message(msg_id)
-                    if dm_msg:
-                        await dm_msg.delete()
-            except Exception:
-                pass
+    # ถ้ายกเลิกกิจกรรม
+    if after.status in [discord.EventStatus.cancelled, discord.EventStatus.completed, discord.EventStatus.ended]:
+        target_ev_id = None
+        target_data = None
+        for eid, ev in list(events_db.get("events", {}).items()):
+            if ev.get("discord_event_id") == after.id:
+                target_ev_id = eid
+                target_data = ev
+                break
 
-        # ลบออกจากฐานข้อมูล
-        del events_db["events"][target_ev_id]
-        save_events(events_db)
-        print(f"[🗑️ Cancel Event] ยกเลิกและลบข้อความประกาศกิจกรรม {event.name} (#{target_ev_id}) ทั้งหมดเรียบร้อยแล้ว!")
+        if target_data and target_ev_id:
+            await purge_event_completely(guild, target_ev_id, target_data)
 
 async def cleanup_orphaned_event_messages(guild):
     """
