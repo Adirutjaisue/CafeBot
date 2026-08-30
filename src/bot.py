@@ -561,25 +561,28 @@ def render_event_announcement_embed(ev_data):
     return embed
 
 class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่วมกิจกรรม"):
-    def __init__(self, event_id: int):
+    def __init__(self, event_id: int, default_role: str = "ดาเมจ", default_ign: str = ""):
         super().__init__()
         self.event_id = event_id
 
-    role_input = TextInput(
-        label="1. ตำแหน่งของคุณ (พระ / แทงค์ / ดาเมจ)",
-        placeholder="พิมพ์: พระ หรือ แทงค์/ไนท์ หรือ ดาเมจ",
-        default="ดาเมจ",
-        min_length=1,
-        max_length=20,
-        required=True
-    )
-    ign_input = TextInput(
-        label="2. ชื่อในเกม (In-Game Name / IGN)",
-        placeholder="เช่น Yuna, KarnZaa, NONT#TH1",
-        min_length=1,
-        max_length=25,
-        required=True
-    )
+        self.role_input = TextInput(
+            label="1. ตำแหน่งของคุณ (พระ / แทงค์ / ดาเมจ)",
+            placeholder="พิมพ์: พระ หรือ แทงค์/ไนท์ หรือ ดาเมจ",
+            default=default_role,
+            min_length=1,
+            max_length=20,
+            required=True
+        )
+        self.ign_input = TextInput(
+            label="2. ชื่อในเกม (In-Game Name / IGN)",
+            placeholder="เช่น Yuna, KarnZaa, NONT#TH1",
+            default=default_ign or "Gamer",
+            min_length=1,
+            max_length=25,
+            required=True
+        )
+        self.add_item(self.role_input)
+        self.add_item(self.ign_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         role_raw = self.role_input.value.strip().lower()
@@ -1757,7 +1760,64 @@ class MasterCafeBot(commands.Bot):
             # --- ปุ่มลงชื่อใน Event Card / DM ---
             elif custom_id.startswith("btn_ev_signup_"):
                 ev_id_str = custom_id.replace("btn_ev_signup_", "")
-                await interaction.response.send_modal(EventSignUpModal(int(ev_id_str)))
+                ev_data = events_db.get("events", {}).get(ev_id_str)
+                
+                uid = str(interaction.user.id)
+                user_data = user_levels_db.get(uid, {})
+                user_ro_job = user_data.get("ro_job")
+
+                # ตรวจสอบว่าเป็นกิจกรรม Ragnarok ทุกรูปแบบหรือไม่
+                if ev_data:
+                    ev_title = ev_data.get("title", "")
+                    game_title = ev_data.get("game", "")
+                    is_ro_event = check_is_ragnarok_player(ev_title) or check_is_ragnarok_player(game_title)
+                    
+                    if is_ro_event and not user_ro_job:
+                        # ส่งข้อความพร้อมปุ่มเลือกอาชีพไปที่แชทส่วนตัว (DM) ทันที
+                        dm_embed = discord.Embed(
+                            title="⚔️ กรุณาเลือกอาชีพ Ragnarok ก่อนลงชื่อกิจกรรม 🎮",
+                            description=(
+                                f"สวัสดีครับคุณ {interaction.user.mention}! 🏰\n\n"
+                                f"กิจกรรม **[{ev_title}]** เป็นกิจกรรมเกม **Ragnarok**\n"
+                                "ระบบต้องการทราบอาชีพของคุณเพื่อนำไปจัดสมดุลปาร์ตี้ (พระ / แทงค์ / ดาเมจ)\n\n"
+                                "👇 **กรุณากดปุ่มเลือกอาชีพของคุณด้านล่างนี้ได้เลยครับ:**"
+                            ),
+                            color=discord.Color.gold()
+                        )
+                        dm_embed.set_thumbnail(url="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80")
+                        
+                        dm_sent = False
+                        try:
+                            await interaction.user.send(embed=dm_embed, view=RolesOnlyView())
+                            dm_sent = True
+                        except Exception:
+                            pass
+                        
+                        dm_text = "\n📩 **บอทได้ส่งปุ่มเลือกอาชีพไปในแชทส่วนตัว (DM) ให้คุณแล้วครับ**" if dm_sent else "\n*(กรุณาเปิดรับ DM หรือพิมพ์ `!rojob` ในห้องคุยเล่น)*"
+                        await interaction.response.send_message(
+                            f"⚠️ **คุณยังไม่ได้เลือกอาชีพ Ragnarok ครับ!**\n"
+                            f"กิจกรรม **[{ev_title}]** จำเป็นต้องระบุอาชีพเพื่อจัดสมดุลตี้{dm_text}\n\n"
+                            f"💡 *เมื่อกดเลือกอาชีพใน DM เรียบร้อยแล้ว สามารถกดปุ่ม **[⚔️ ลงชื่อเข้าร่วมกิจกรรม]** อีกครั้งได้ทันทีครับ!*",
+                            ephemeral=True
+                        )
+                        return
+
+                # กำหนดค่าเริ่มต้นให้อัตโนมัติตามข้อมูลผู้ใช้
+                default_role = "ดาเมจ"
+                if user_ro_job:
+                    if user_ro_job in ["priest"]:
+                        default_role = "พระ"
+                    elif user_ro_job in ["knight", "crusader"]:
+                        default_role = "แทงค์"
+
+                base_name = user_data.get("base_name", "")
+                default_ign = ""
+                if "•" in base_name:
+                    default_ign = base_name.split("•")[1].strip()
+                elif base_name:
+                    default_ign = base_name
+
+                await interaction.response.send_modal(EventSignUpModal(int(ev_id_str), default_role=default_role, default_ign=default_ign))
                 return
 
             elif custom_id.startswith("btn_ev_view_roster_"):
