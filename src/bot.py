@@ -1554,42 +1554,99 @@ async def setup_party_channel_hub(guild):
     print("[+] ปรับห้อง #⚔️・จัดตี้เกม เป็นห้องประกาศตี้และสรุปผลตี้แบบคลีน 100% เรียบร้อย")
 
 async def configure_channel_permissions(guild):
-    photo_ch = guild.get_channel(PHOTO_CHANNEL_ID)
-    if photo_ch:
+    """
+    🔒 ล็อคและซ่อนทุกห้องจากยศ 'ยังไม่ได้ตั้งชื่อ' และ @everyone
+    เห็นได้เฉพาะห้อง #ต้อนรับ และ #กฎ จนกว่าจะตั้งชื่อเสร็จและได้ยศ 'Cafe Member'
+    """
+    unverified_role = discord.utils.get(guild.roles, name=UNVERIFIED_ROLE_NAME) or discord.utils.get(guild.roles, name="ยังไม่ได้ตั้งชื่อ")
+    if not unverified_role:
         try:
-            perms = discord.PermissionOverwrite(
-                view_channel=True,
-                read_messages=True,
-                read_message_history=True,
-                send_messages=False,
-                add_reactions=True
-            )
-            await photo_ch.set_permissions(guild.default_role, overwrite=perms)
-            member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or discord.utils.get(guild.roles, name="Cafe Member")
-            if member_role:
-                await photo_ch.set_permissions(member_role, overwrite=perms)
-            print("[+] ตั้งค่าห้อง #รูปภาพ สำเร็จ!")
+            unverified_role = await guild.create_role(name=UNVERIFIED_ROLE_NAME, color=discord.Color.dark_grey(), reason="Auto-created unverified role")
         except Exception:
             pass
 
-    forum_ch = discord.utils.get(guild.forums, name="🎁・แลกของตกแต่ง") or discord.utils.get(guild.forums, name="แลกของตกแต่ง")
-    if forum_ch:
+    member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or discord.utils.get(guild.roles, name="Cafe Member")
+    if not member_role:
         try:
-            forum_perms = discord.PermissionOverwrite(
-                view_channel=True,
-                read_messages=True,
-                read_message_history=True,
-                create_public_threads=False,
-                create_private_threads=False,
-                send_messages=False
-            )
-            await forum_ch.set_permissions(guild.default_role, overwrite=forum_perms)
-            member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME) or discord.utils.get(guild.roles, name="Cafe Member")
-            if member_role:
-                await forum_ch.set_permissions(member_role, overwrite=forum_perms)
-            print("[+] ตั้งค่า Forum 🎁・แลกของตกแต่ง สำเร็จ!")
+            member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.from_rgb(255, 107, 129), reason="Auto-created member role")
         except Exception:
             pass
+
+    # สิทธิ์สำหรับห้องที่อนุญาตให้คนยังไม่ตั้งชื่อดูได้ (ต้อนรับ, กฎ)
+    public_ch_ids = {WELCOME_CHANNEL_ID, RULES_CHANNEL_ID}
+
+    hide_perms = discord.PermissionOverwrite(
+        view_channel=False,
+        connect=False,
+        send_messages=False,
+        read_messages=False
+    )
+    show_member_text_perms = discord.PermissionOverwrite(
+        view_channel=True,
+        read_messages=True,
+        read_message_history=True,
+        send_messages=True
+    )
+    show_member_voice_perms = discord.PermissionOverwrite(
+        view_channel=True,
+        connect=True,
+        speak=True,
+        stream=True
+    )
+
+    # 1. ตั้งค่า Text Channels & Voice Channels
+    for ch in guild.channels:
+        if ch.id in public_ch_ids:
+            # ห้องสาธารณะ (ต้อนรับ, กฎ)
+            try:
+                public_perms = discord.PermissionOverwrite(
+                    view_channel=True,
+                    read_messages=True,
+                    read_message_history=True,
+                    send_messages=False
+                )
+                if unverified_role:
+                    await ch.set_permissions(unverified_role, overwrite=public_perms)
+                await ch.set_permissions(guild.default_role, overwrite=public_perms)
+            except Exception:
+                pass
+        else:
+            # ห้องอื่นๆ ทั้งหมด (คุยเล่น, ข่าว, จัดตี้, รูปภาพ, ตลาด, ห้องเสียง) -> ซ่อนจากคนยังไม่ตั้งชื่อ 100%
+            try:
+                if unverified_role:
+                    await ch.set_permissions(unverified_role, overwrite=hide_perms)
+                await ch.set_permissions(guild.default_role, overwrite=hide_perms)
+
+                if member_role:
+                    if isinstance(ch, discord.VoiceChannel):
+                        await ch.set_permissions(member_role, overwrite=show_member_voice_perms)
+                    elif ch.id == PHOTO_CHANNEL_ID or ch.id == NEWS_CHANNEL_ID:
+                        # ห้องรูปภาพ/ข่าว สมาชิกดูได้อย่างเดียว ห้ามพิมพ์
+                        readonly_perms = discord.PermissionOverwrite(
+                            view_channel=True,
+                            read_messages=True,
+                            read_message_history=True,
+                            send_messages=False,
+                            add_reactions=True
+                        )
+                        await ch.set_permissions(member_role, overwrite=readonly_perms)
+                    else:
+                        await ch.set_permissions(member_role, overwrite=show_member_text_perms)
+            except Exception:
+                pass
+
+    # 2. ตั้งค่า Categories ทั้งหมด
+    for cat in guild.categories:
+        try:
+            if unverified_role:
+                await cat.set_permissions(unverified_role, overwrite=hide_perms)
+            await cat.set_permissions(guild.default_role, overwrite=hide_perms)
+            if member_role:
+                await cat.set_permissions(member_role, overwrite=show_member_text_perms)
+        except Exception:
+            pass
+
+    print("[🔒 Permissions] ตั้งค่าซ่อนทุกห้องจากยศ 'ยังไม่ได้ตั้งชื่อ' และเปิดให้เฉพาะ 'Cafe Member' สำเร็จ 100%!")
 
 async def send_dm_verification(member):
     embed = discord.Embed(
