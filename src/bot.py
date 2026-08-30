@@ -49,10 +49,34 @@ PARTY_CHANNEL_ID = 1543565062038364251  # ห้อง ⚔️・จัดตี�
 REPORT_LOG_CHANNEL_ID = 1543479721302560828 # ห้อง #แจ้งปัญหา
 
 UNVERIFIED_ROLE_NAME = "🔒・ยังไม่ได้ตั้งชื่อ"
-MEMBER_ROLE_NAME = "☕・Cafe Member"
+MEMBER_ROLE_NAME = "Cafe Member"
 BIRTHDAY_ROLE_NAME = "🎂・Birthday"
 GOOD_TRADER_ROLE = "⭐・พ่อค้าเครดิตดี"
 TOP_TRADER_ROLE = "👑・พ่อค้าดีเด่น"
+
+def get_member_role(guild: discord.Guild):
+    """ค้นหายศสมาชิก (รองรับทั้ง 'Cafe Member', '☕・Cafe Member')"""
+    if not guild:
+        return None
+    for r in guild.roles:
+        if r.name in ["Cafe Member", "☕・Cafe Member", "Member", "CafeMember"]:
+            return r
+    for r in guild.roles:
+        if "cafe member" in r.name.lower():
+            return r
+    return None
+
+def get_unverified_role(guild: discord.Guild):
+    """ค้นหายศยังไม่ได้ตั้งชื่อ"""
+    if not guild:
+        return None
+    for r in guild.roles:
+        if "ยังไม่ได้ตั้งชื่อ" in r.name:
+            return r
+    for r in guild.roles:
+        if "unverified" in r.name.lower():
+            return r
+    return None
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 if os.path.exists(os.path.join(CURR_DIR, "database")):
@@ -2230,6 +2254,26 @@ async def on_ready():
         await configure_afk_system(guild)
         await configure_channel_permissions(guild)
         await cleanup_orphaned_event_messages(guild)
+
+        # 🔄 Auto-Sync: ซิงค์ยศสมาชิกที่เคยตั้งชื่อแล้วให้ได้รับยศ Cafe Member ทันที
+        member_r = get_member_role(guild)
+        unverified_r = get_unverified_role(guild)
+        for m in guild.members:
+            if m.bot:
+                continue
+            uid_str = str(m.id)
+            if uid_str in user_levels_db and user_levels_db[uid_str].get("base_name"):
+                if unverified_r and unverified_r in m.roles:
+                    try:
+                        await m.remove_roles(unverified_r)
+                    except Exception:
+                        pass
+                if member_r and member_r not in m.roles:
+                    try:
+                        await m.add_roles(member_r)
+                        print(f"[+] Auto-Sync: มอบยศ {member_r.name} ให้กับ {m.name} สำเร็จ")
+                    except Exception:
+                        pass
 
     if not auto_news_loop.is_running():
         auto_news_loop.start()
