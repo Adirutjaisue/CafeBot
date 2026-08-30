@@ -2154,13 +2154,19 @@ async def on_member_join(member):
         except Exception:
             pass
 
-    unverified_role = discord.utils.get(guild.roles, name=UNVERIFIED_ROLE_NAME)
+    unverified_role = discord.utils.get(guild.roles, name=UNVERIFIED_ROLE_NAME) or discord.utils.get(guild.roles, name="ยังไม่ได้ตั้งชื่อ")
+    if not unverified_role:
+        try:
+            unverified_role = await guild.create_role(name=UNVERIFIED_ROLE_NAME, color=discord.Color.dark_grey(), reason="Auto-created unverified role for new members")
+        except Exception:
+            pass
+
     if unverified_role:
         try:
             await member.add_roles(unverified_role)
-            print(f"[+] มอบยศ {UNVERIFIED_ROLE_NAME} ให้กับ: {member.name}")
-        except Exception:
-            pass
+            print(f"[+] มอบยศ {unverified_role.name} ให้กับสมาชิกใหม่: {member.name}")
+        except Exception as e:
+            print(f"[!] ไม่สามารถมอบยศ {UNVERIFIED_ROLE_NAME} ให้ {member.name}: {e}")
 
     await send_dm_verification(member)
 
