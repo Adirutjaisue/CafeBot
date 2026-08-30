@@ -560,6 +560,38 @@ def render_event_announcement_embed(ev_data):
     embed.set_footer(text=f"Gamers' Café Event System • Event #{ev_id}")
     return embed
 
+async def update_event_messages(guild, ev_data):
+    """
+    🔄 อัปเดตการ์ดกิจกรรมในห้อง #จัดตี้เกม และ #คุยเล่น แบบเรียลไทม์เมื่อมียอดคนลงชื่อเพิ่ม
+    """
+    if not guild or not ev_data:
+        return
+    embed = render_event_announcement_embed(ev_data)
+    
+    # 1. อัปเดตห้อง #⚔️・จัดตี้เกม
+    party_mid = ev_data.get("party_msg_id") or ev_data.get("channel_msg_id")
+    if party_mid:
+        party_ch = guild.get_channel(PARTY_CHANNEL_ID)
+        if party_ch:
+            try:
+                msg = await party_ch.fetch_message(party_mid)
+                if msg:
+                    await msg.edit(embed=embed)
+            except Exception:
+                pass
+
+    # 2. อัปเดตห้อง #💬・คุยเล่น
+    chat_mid = ev_data.get("chat_msg_id")
+    if chat_mid:
+        chat_ch = guild.get_channel(CHAT_CHANNEL_ID)
+        if chat_ch:
+            try:
+                msg = await chat_ch.fetch_message(chat_mid)
+                if msg:
+                    await msg.edit(embed=embed)
+            except Exception:
+                pass
+
 class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่วมกิจกรรม"):
     def __init__(self, event_id: int, default_role: str = "ดาเมจ", default_ign: str = ""):
         super().__init__()
@@ -609,6 +641,22 @@ class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่
             await interaction.response.send_message("⚠️ กิจกรรมนี้ปิดรับสมัครและจัดตี้ไปแล้วครับ!", ephemeral=True)
             return
 
+        # 🚫 ตรวจสอบการลงชื่อซ้ำ
+        uid_str = str(interaction.user.id)
+        participants = ev_data.get("participants", {})
+        if uid_str in participants:
+            existing = participants[uid_str]
+            role_map = {"healer": "💖 พระ / ซัพพอร์ต", "tank": "🛡️ ไนท์ / แทงค์", "dps": "🗡️ ดาเมจ"}
+            ex_role_th = role_map.get(existing.get("role"), existing.get("role"))
+            await interaction.response.send_message(
+                f"⚠️ **คุณได้ลงชื่อเข้าร่วมกิจกรรม [{ev_data.get('title')}] ไว้แล้วครับ!**\n\n"
+                f"• 👤 **ตำแหน่งที่ลงไว้:** `{ex_role_th}`\n"
+                f"• 🎮 **ชื่อในเกม (IGN):** `{existing.get('ign', '-')}`\n\n"
+                f"💡 *ระบบไม่อนุญาตให้ลงชื่อซ้ำครับ รอระบบจัดกลุ่มตี้ก่อนเริ่มกิจกรรม 8 นาทีได้เลยครับ!*",
+                ephemeral=True
+            )
+            return
+
         # 🔍 ตรวจสอบและอัปเดตชื่อใน Server ให้ตรงกับชื่อในเกม (IGN)
         member = guild.get_member(interaction.user.id) if guild else None
         nick_change_msg = ""
@@ -628,7 +676,8 @@ class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่
                 user_levels_db[uid] = current_data
                 save_user_levels(user_levels_db)
 
-                final_name = format_nickname_with_level(new_base_name, current_lvl)
+                job_em = current_data.get("job_emoji", "")
+                final_name = format_nickname_with_level(new_base_name, current_lvl, job_em)
                 try:
                     await member.edit(nick=final_name)
                     nick_change_msg = f"\n✨ **บอทได้อัปเดตชื่อในเซิร์ฟเวอร์ของคุณให้ตรงกับชื่อในเกมเป็น:** `{final_name}`"
@@ -637,8 +686,6 @@ class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่
                     pass
 
         # บันทึกผู้เข้าร่วม
-        uid_str = str(interaction.user.id)
-        participants = ev_data.get("participants", {})
         participants[uid_str] = {
             "user_id": interaction.user.id,
             "name": interaction.user.display_name,
@@ -649,17 +696,9 @@ class EventSignUpModal(Modal, title="⚔️ ลงชื่อเข้าร่
         ev_data["participants"] = participants
         save_events(events_db)
 
-        # อัปเดตข้อความประกาศ
-        embed = render_event_announcement_embed(ev_data)
-        try:
-            if "channel_msg_id" in ev_data:
-                party_ch = guild.get_channel(PARTY_CHANNEL_ID)
-                if party_ch:
-                    msg = await party_ch.fetch_message(ev_data["channel_msg_id"])
-                    if msg:
-                        await msg.edit(embed=embed)
-        except Exception:
-            pass
+        # 🔄 อัปเดตยอดสะสมบนการ์ดในทุกห้องแบบเรียลไทม์
+        if guild:
+            await update_event_messages(guild, ev_data)
 
         await interaction.response.send_message(
             f"✅ **ลงชื่อเข้าร่วมกิจกรรม [{ev_data.get('title')}] สำเร็จ!**\n"
@@ -786,14 +825,18 @@ class CreateEventModal(Modal, title="📢 สร้างกิจกรรม�
 
         # 2. ส่งประกาศลงห้อง #คุยเล่น
         chat_ch = guild.get_channel(CHAT_CHANNEL_ID)
+        chat_msg_id = None
         if chat_ch:
-            await chat_ch.send(
+            m2 = await chat_ch.send(
                 content=f"⚔️ **มีนัดตี้กิจกรรม [{ev_title}] วันนี้เวลา `{ev_time_str} น.`!** กดปุ่มลงชื่อด้านล่างได้เลยครับ @everyone",
                 embed=embed,
                 view=EventActionView(ev_id)
             )
+            chat_msg_id = m2.id
 
+        ev_data["party_msg_id"] = ch_msg_id
         ev_data["channel_msg_id"] = ch_msg_id
+        ev_data["chat_msg_id"] = chat_msg_id
         save_events(events_db)
 
         # 3. ส่งข้อความ DM หาผู้ใช้ทุกคนในเซิร์ฟเวอร์แบบ Asynchronous Background
