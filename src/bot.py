@@ -144,6 +144,23 @@ GAME_ROLE_MAPPING = {
     "genshin": "✨・Genshin Impact"
 }
 
+RAGNAROK_JOBS = {
+    "knight": {"name": "Knight / Lord Knight", "emoji": "⚔️", "role": "⚔️・Knight / LK", "desc": "สายดาบ/หอก ชนบอส ถึกทน ดาเมจหนัก"},
+    "crusader": {"name": "Crusader / Paladin", "emoji": "🛡️", "role": "🛡️・Crusader / Paladin", "desc": "สายโล่ศักดิ์สิทธิ์ โคตรถึก คุ้มกันเพื่อน"},
+    "wizard": {"name": "Wizard / High Wizard", "emoji": "🧙‍♂️", "role": "🧙‍♂️・High Wizard", "desc": "สายเวทมนตร์หมู่ ถล่มมอนสเตอร์ทั้งจอ"},
+    "sage": {"name": "Sage / Professor", "emoji": "📖", "role": "📖・Sage / Professor", "desc": "สายเคลือบธาตุ ตัดเวท เติม SP ป่วนบอส"},
+    "hunter": {"name": "Hunter / Sniper", "emoji": "🏹", "role": "🏹・Hunter / Sniper", "desc": "สายธนู ยิงไกล ดาเมจคริรัว วางแทรป"},
+    "bard_dancer": {"name": "Bard / Dancer / Clown", "emoji": "🎶", "role": "🎶・Bard / Dancer", "desc": "สายร้องเพลง/เต้น บัฟความเร็วและสกิลตี้"},
+    "assassin": {"name": "Assassin / SinX", "emoji": "🗡️", "role": "🗡️・Assassin / SinX", "desc": "สายมีด/กาตาร์ ล่องหน คริรัว ซัดทีเดียวดับ"},
+    "rogue": {"name": "Rogue / Stalker", "emoji": "🎭", "role": "🎭・Rogue / Stalker", "desc": "สายปลดเกราะ คัดลอกสกิล โคตรพริ้ว"},
+    "priest": {"name": "Priest / High Priest", "emoji": "✨", "role": "✨・Priest / High Priest", "desc": "สายซัพพอร์ต ฮีล บัฟ ชุบชีวิต ขาดไม่ได้"},
+    "monk": {"name": "Monk / Champion", "emoji": "🥋", "role": "🥋・Monk / Champion", "desc": "สายหมัดอาชูร่า หมัดเดียวปิดชีพทุกอย่าง"},
+    "blacksmith": {"name": "Blacksmith / Whitesmith", "emoji": "🔨", "role": "🔨・Whitesmith", "desc": "สายตีดาบ ฟันไว ตีบวก ปาเงินแรง"},
+    "alchemist": {"name": "Alchemist / Creator", "emoji": "🧪", "role": "🧪・Alchemist / Creator", "desc": "สายปาขวด ปายา เรียกลูกสมุนพืช"},
+    "gunslinger_ninja": {"name": "Gunslinger / Ninja", "emoji": "🔫", "role": "🔫・Gunslinger / Ninja", "desc": "สายปืน ยิงไว / นินจาคาถาและดาวกระจาย"},
+    "doram": {"name": "Doram (เผ่าแมว)", "emoji": "🐱", "role": "🐱・Doram (แมว)", "desc": "เผ่าแมวน้อย สกิลพืช/สัตว์/เวท ครบเครื่อง"}
+}
+
 SHOP_ITEMS = {
     "1": {"name": "🌸・Sakura Pink", "price": 500, "desc": "ยศสีชื่อชมพูซากุระ"},
     "2": {"name": "🌊・Ocean Blue", "price": 500, "desc": "ยศสีฟ้าน้ำทะเล"},
@@ -389,18 +406,25 @@ def get_level_from_xp(xp):
         lvl += 1
     return lvl
 
-def format_nickname_with_level(base_name, level):
+def format_nickname_with_level(base_name, level, job_emoji=""):
+    emoji_prefix = f"{job_emoji} " if job_emoji else ""
     tag = f" [Lv.{level}]"
-    max_base_len = 32 - len(tag)
-    clean_base = base_name[:max_base_len].strip()
-    return f"{clean_base}{tag}"
+    available_len = 32 - len(tag) - len(emoji_prefix)
+    clean_base = base_name[:max(5, available_len)].strip()
+    return f"{emoji_prefix}{clean_base}{tag}"
 
 def extract_base_name(display_name):
     name = display_name
+    # ตัดแท็กเลเวลออก
     if name.startswith("[Lv.") and "]" in name:
         name = name.split("]", 1)[1].strip()
     if " [Lv." in name:
         name = name.split(" [Lv.")[0].strip()
+    # ตัดอิโมจิอาชีพนำหน้าออก
+    for info in RAGNAROK_JOBS.values():
+        em = info["emoji"]
+        if name.startswith(em):
+            name = name[len(em):].strip()
     return name
 
 def add_user_xp(user_id_str, base_name, xp_gain):
@@ -947,6 +971,116 @@ class DailyClaimView(View):
         self.add_item(Button(label="🎁 รับเหรียญรายวันฟรี", style=discord.ButtonStyle.success, custom_id="btn_direct_claim_daily", emoji="🪙"))
         self.add_item(Button(label="💰 เช็คยอดเหรียญของฉัน", style=discord.ButtonStyle.secondary, custom_id="btn_direct_check_balance", emoji="👛"))
 
+class ROJobSelect(discord.ui.Select):
+    def __init__(self, target_user_id: int = 0):
+        options = []
+        for jkey, info in RAGNAROK_JOBS.items():
+            options.append(discord.SelectOption(
+                label=info["name"],
+                value=jkey,
+                description=info["desc"][:50],
+                emoji=info["emoji"]
+            ))
+        super().__init__(
+            placeholder="🎮 คลิกที่นี่เพื่อเลือกอาชีพ Ragnarok ของคุณ...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="select_ro_job_choice"
+        )
+        self.target_user_id = target_user_id
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = bot.get_guild(TARGET_GUILD_ID)
+        if not guild:
+            await interaction.response.send_message("❌ ไม่พบเซิร์ฟเวอร์", ephemeral=True)
+            return
+
+        try:
+            member = guild.get_member(interaction.user.id) or await guild.fetch_member(interaction.user.id)
+        except Exception:
+            member = None
+
+        if not member:
+            await interaction.response.send_message("❌ ไม่พบข้อมูลสมาชิกในเซิร์ฟเวอร์", ephemeral=True)
+            return
+
+        selected_key = self.values[0]
+        job_info = RAGNAROK_JOBS.get(selected_key)
+        if not job_info:
+            return
+
+        job_emoji = job_info["emoji"]
+        job_name = job_info["name"]
+        job_role_name = job_info["role"]
+
+        # 1. บันทึกข้อมูลลง Database
+        uid = str(member.id)
+        u_data = user_levels_db.get(uid, {"xp": 0, "level": 1, "base_name": extract_base_name(member.display_name)})
+        u_data["ro_job"] = selected_key
+        u_data["job_emoji"] = job_emoji
+        user_levels_db[uid] = u_data
+        save_user_levels(user_levels_db)
+
+        # 2. มอบยศเกมหลัก Ragnarok
+        ro_main_role = discord.utils.get(guild.roles, name="🗡️・Ragnarok") or discord.utils.find(lambda r: "ragnarok" in r.name.lower(), guild.roles)
+        if ro_main_role and ro_main_role not in member.roles:
+            try:
+                await member.add_roles(ro_main_role)
+            except Exception:
+                pass
+
+        # 3. ลบยศอาชีพเก่าอื่นๆ ของ RO ออก
+        all_ro_role_names = {info["role"] for info in RAGNAROK_JOBS.values()}
+        old_ro_roles = [r for r in member.roles if r.name in all_ro_role_names and r.name != job_role_name]
+        if old_ro_roles:
+            try:
+                await member.remove_roles(*old_ro_roles)
+            except Exception:
+                pass
+
+        # 4. มอบยศอาชีพใหม่ (สร้างยศอัตโนมัติหากยังไม่มี)
+        job_role = discord.utils.get(guild.roles, name=job_role_name)
+        if not job_role:
+            try:
+                job_role = await guild.create_role(name=job_role_name, color=discord.Color.blue(), reason="Auto-created Ragnarok Job Role")
+            except Exception:
+                pass
+        if job_role and job_role not in member.roles:
+            try:
+                await member.add_roles(job_role)
+            except Exception:
+                pass
+
+        # 5. เปลี่ยนชื่อเล่นให้มีอิโมจิอาชีพนำหน้า
+        base_name = u_data.get("base_name") or extract_base_name(member.display_name)
+        current_lvl = u_data.get("level", 1)
+        final_nick = format_nickname_with_level(base_name, current_lvl, job_emoji)
+        try:
+            await member.edit(nick=final_nick)
+        except Exception:
+            pass
+
+        embed = discord.Embed(
+            title=f"⚔️ เลือกอาชีพ Ragnarok สำเร็จ! {job_emoji}",
+            description=(
+                f"ยินดีด้วยครับคุณ {member.mention}! ✨\n\n"
+                f"🏷️ **อาชีพที่เลือก:** `{job_name}` ({job_emoji})\n"
+                f"👑 **ยศที่ได้รับ:** {job_role.mention if job_role else f'`{job_role_name}`'}\n"
+                f"👤 **ชื่อใหม่ในเซิร์ฟเวอร์:** `{final_nick}`\n\n"
+                f"💡 *สามารถเปลี่ยนอาชีพได้ตลอดเวลาโดยพิมพ์คำสั่ง `!rojob` ในห้องคุยเล่นครับ*"
+            ),
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"[+] {member.name} เลือกอาชีพ Ragnarok: {job_name} ({job_emoji}) -> ชื่อ: {final_nick}")
+
+class ROJobSelectView(View):
+    def __init__(self, target_user_id: int = 0):
+        super().__init__(timeout=None)
+        self.add_item(ROJobSelect(target_user_id))
+
 class DMRegisterView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -1072,6 +1206,24 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
         await interaction.response.send_message(reply_msg)
         await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
+
+        # ถ้าผู้ใช้เล่น Ragnarok ให้ส่งเมนูเลือกอาชีพทันที
+        is_ro = any(kw in user_games_text for kw in ["ragnarok", "rag", "ro"])
+        if is_ro:
+            ro_prompt_embed = discord.Embed(
+                title="⚔️ คุณเล่น Ragnarok! กรุณาเลือกอาชีพของคุณ 🎮",
+                description=(
+                    "🏰 **เลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:**\n\n"
+                    "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
+                    "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์**\n"
+                    "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
+                ),
+                color=discord.Color.gold()
+            )
+            try:
+                await interaction.user.send(embed=ro_prompt_embed, view=ROJobSelectView(member.id))
+            except Exception:
+                pass
 
 # ==================== ⭐ GUI Modals เครดิต ====================
 
@@ -1379,6 +1531,7 @@ class MasterCafeBot(commands.Bot):
 
     async def setup_hook(self):
         self.add_view(DMRegisterView())
+        self.add_view(ROJobSelectView(0))
         self.add_view(DailyClaimView())
         self.add_view(MarketRepActionView())
         self.add_view(PartyHubView())
@@ -2599,6 +2752,24 @@ async def on_message(message: discord.Message):
         await message.channel.send(embed=success_embed)
         await delete_user_verification_dms(member.id)
         print(f"[+] สมาชิก {member.name} ยืนยันผ่าน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
+
+        # ถ้าผู้ใช้เล่น Ragnarok ให้ส่งเมนูเลือกอาชีพทันที
+        is_ro = any(kw in user_game for kw in ["ragnarok", "rag", "ro"])
+        if is_ro:
+            ro_prompt_embed = discord.Embed(
+                title="⚔️ คุณเล่น Ragnarok! กรุณาเลือกอาชีพของคุณ 🎮",
+                description=(
+                    "🏰 **เลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:**\n\n"
+                    "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
+                    "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์**\n"
+                    "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
+                ),
+                color=discord.Color.gold()
+            )
+            try:
+                await message.author.send(embed=ro_prompt_embed, view=ROJobSelectView(member.id))
+            except Exception:
+                pass
         return
 
     # 2. จัดการเมื่อพิมพ์ในห้องเซิร์ฟเวอร์ (ถ้ายังไม่ยืนยันตัวตน)
@@ -2711,6 +2882,29 @@ async def on_message(message: discord.Message):
                 pass
 
     await bot.process_commands(message)
+
+# ==================== ⚔️ คำสั่งระบบอาชีพ Ragnarok ====================
+
+@bot.command(name="rojob", aliases=["อาชีพ", "job", "เลือกอาชีพ", "ro"])
+async def cmd_rojob(ctx):
+    """
+    ⚔️ เมนูเลือกอาชีพ Ragnarok และใส่อิโมจิอาชีพนำหน้าชื่ออัตโนมัติ
+    """
+    embed = discord.Embed(
+        title="⚔️ เมนูเลือกอาชีพ Ragnarok Online 🎮",
+        description=(
+            f"สวัสดีครับคุณ {ctx.author.mention}! 🏰\n\n"
+            "กรุณาเลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:\n\n"
+            "✨ **สิทธิประโยชน์ที่จะได้รับ:**\n"
+            "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
+            "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์**\n"
+            "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
+        ),
+        color=discord.Color.from_rgb(255, 215, 0)
+    )
+    embed.set_thumbnail(url="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80")
+    embed.set_footer(text="Gamers' Café • Ragnarok Job System")
+    await ctx.send(embed=embed, view=ROJobSelectView(ctx.author.id))
 
 # ==================== ⭐ คำสั่งระบบเครดิต ====================
 
