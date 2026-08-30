@@ -1134,12 +1134,35 @@ class DMRegisterView(View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="🟢  กรอกชื่อเล่น & ชื่อในเกม (คลิกที่นี่)  🟢",
+        label="🟢 1. กรอกชื่อเล่น & ปลดล็อคห้อง",
         style=discord.ButtonStyle.success,
-        custom_id="btn_dm_profile_modal_spaced"
+        custom_id="btn_dm_profile_modal_spaced",
+        row=0
     )
     async def open_modal_button(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(GamerProfileModal())
+
+    @discord.ui.button(
+        label="⚔️ 2. ฉันเล่น Ragnarok (เลือกอาชีพ & ใส่อิโมจิหน้าชื่อ)",
+        style=discord.ButtonStyle.primary,
+        custom_id="btn_dm_pick_ro_job",
+        row=1
+    )
+    async def pick_ro_job_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="⚔️ เมนูเลือกอาชีพ Ragnarok Online 🎮",
+            description=(
+                f"สวัสดีครับคุณ {interaction.user.mention}! 🏰\n\n"
+                "กรุณาเลือกอาชีพที่คุณเล่นจากเมนูดรอปดาวน์ด้านล่างนี้ได้เลยครับ:\n\n"
+                "✨ **เมื่อเลือกแล้ว:**\n"
+                "• 🏷️ **รับยศประจำอาชีพของคุณ**\n"
+                "• 👑 **ใส่อิโมจิประจำอาชีพไว้หน้าชื่อเล่นของคุณในเซิร์ฟเวอร์อัตโนมัติ**\n"
+                "• ⚔️ **เพื่อนๆ ในตี้จะเห็นอาชีพของคุณทันทีตอนหาตี้ลงดัน!**"
+            ),
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80")
+        await interaction.response.send_message(embed=embed, view=ROJobSelectView(interaction.user.id), ephemeral=True)
 
 class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น & ข้อมูลเกม"):
     nickname_input = TextInput(
