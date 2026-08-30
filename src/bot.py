@@ -1377,11 +1377,10 @@ class GamerProfileModal(Modal, title="📝 ตั้งชื่อเล่น 
             f"• 🪙 **เหรียญขวัญถุงต้อนรับ:** `+{starting_coins:,} ☕ Coins`\n"
             f"• 👑 **ยศที่ได้รับ:** {member_role.mention if member_role else '`Cafe Member`'}\n\n"
             f"🔓 **ปลดล็อคห้องทั้งหมดในเซิร์ฟเวอร์ Gamers’ Café เรียบร้อยแล้ว**\n"
-            f"👉 *คุณสามารถกดปุ่มเลือกอาชีพ Ragnarok หรือกดรับยศเกมอื่นๆ ด้านล่างนี้ได้เลยครับ!* ☕🎮"
+            f"👇 **กดเลือกอาชีพ Ragnarok หรือเลือกเกมที่คุณเล่นที่ปุ่มด้านล่างนี้ได้เลยครับ:**"
         )
-        await interaction.response.send_message(reply_msg)
-        await delete_user_verification_dms(member.id)
-        print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (ลบข้อความชวนกรอกเดิมเรียบร้อย)")
+        await interaction.response.send_message(reply_msg, view=DMRegisterView())
+        print(f"[+] สมาชิก {member.name} กรอกผ่าน Modal ใน DM: '{final_name}' (พร้อมปุ่มเลือกอาชีพ & เกม)")
 
 # ==================== ⭐ GUI Modals เครดิต ====================
 
